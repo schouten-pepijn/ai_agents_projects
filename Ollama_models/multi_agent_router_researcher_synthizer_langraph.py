@@ -10,15 +10,20 @@ from langchain_tavily import TavilySearch
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
 
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from langchain_community.tools import DuckDuckGoSearchRun
+
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, END
 
-
 load_dotenv(".env")
+
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 MODEL = os.getenv("MODEL")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
+WEB_SEARCH_TOOL = "duckduckgo"
 
 class GraphState(TypedDict):
     messages: List[BaseMessage]
@@ -47,10 +52,19 @@ research_llm = ChatOllama(
     temperature=0.1
 )
 
-web_search = TavilySearch(
-    max_results=5,
-    tavily_api_key=TAVILY_API_KEY
-)
+if WEB_SEARCH_TOOL == "tavily":
+    web_search = TavilySearch(
+        max_results=5,
+        tavily_api_key=TAVILY_API_KEY
+    )
+elif WEB_SEARCH_TOOL == "duckduckgo":
+    wrapper = DuckDuckGoSearchAPIWrapper(
+        region="wt-wt",
+        safesearch="moderate",
+        time=None,
+        max_results=5
+    )
+    web_search = DuckDuckGoSearchRun(api_wrapper=wrapper)
 
 tools = [web_search]
 
@@ -225,8 +239,6 @@ def ask(question: str, thread_id: str = "web-thread-1") -> str:
     )
     final_msgs = [m for m in result["messages"] if isinstance(m, AIMessage)]
     return final_msgs[-1].content if final_msgs else ""
-
-
 
 q = "We have a general ledger account with description 'Cash in Bank'. Determine the right financial category to classify."
 print(ask(q))
