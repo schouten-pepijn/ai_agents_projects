@@ -18,7 +18,7 @@ from langgraph.graph import StateGraph, END
 load_dotenv(".env")
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 MODEL = os.getenv("MODEL")
-TAVILY_API_KEY = os.getenv("TAVILIY_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 class GraphState(TypedDict):
     messages: List[BaseMessage]
@@ -49,7 +49,7 @@ research_llm = ChatOllama(
 
 web_search = TavilySearch(
     max_results=5,
-    tavility_api_key=TAVILY_API_KEY
+    tavily_api_key=TAVILY_API_KEY
 )
 
 tools = [web_search]
