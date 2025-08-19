@@ -11,7 +11,7 @@ from langgraph.prebuilt import create_react_agent
 
 from init_db import init_db
 
-from config import DB_PATH, MODEL_URL, MODEL
+from config import DB_PATH, BASE_URL, MODEL
 from prompts import SYSTEM_PROMPT
 
 
@@ -83,7 +83,7 @@ TOOLS = [list_tables_tool, describe_tables_tool, query_sql_tool]
 
 
 llm = ChatOllama(
-    base_url=MODEL_URL,
+    base_url=BASE_URL,
     model=MODEL,
     temperature=0.2
 )
@@ -107,6 +107,7 @@ def run_agent(user_query: str):
     # If the user explicitly asks about tables/columns, run schema discovery first and prepend results
     qlow = user_query.lower()
     if any(k in qlow for k in ("table", "tables", "column", "columns", "schema")):
+        
         tbls_list = list(lc_db.get_usable_table_names())
         tbls = ", ".join(sorted(tbls_list)) if tbls_list else "No tables found."
         schema = lc_db.get_table_info(table_names=tbls_list) if tbls_list else "No schema available."
