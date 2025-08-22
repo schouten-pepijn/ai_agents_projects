@@ -4,6 +4,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, trim_messages
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_community.tools import DuckDuckGoSearchRun
+from ddgs import DDGS
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.tools import Tool
 import gradio as gr
@@ -14,8 +15,10 @@ import re
 # Load environment variables
 load_dotenv(".env")
 
-# MODEL = os.environ["MODEL"]
-MODEL = os.environ["MODEL_EXT"]
+# MODEL = os.environ["MODEL_SMALL"]
+# MODEL = os.environ["MODEL_MEDIUM"]
+MODEL = os.environ["MODEL_LARGE"]
+
 BASE_URL = os.environ["BASE_URL"]
 
 # Initialize the model with streaming capability
@@ -29,12 +32,20 @@ model = ChatOllama(
 # Initialize DuckDuckGo search tool
 search = DuckDuckGoSearchRun()
 
+def ddgs_search(query: str) -> str:
+    """Perform a search using DuckDuckGo Search API."""
+    results = []
+    with DDGS() as ddgs:
+        for r in ddgs.text(query, max_results=5):
+            results.append(f"{r['title']}: {r['href']}")
+    return "\n".join(results) if results else "No results found."
+
 # Create tools list
 tools = [
     Tool(
         name="web_search",
         description="Search the internet for current information, recent events, news, or specific factual data that might not be in your knowledge base. Use this when users ask about recent events, current statistics, or when you need up-to-date information.",
-        func=search.run,
+        func=ddgs_search,
     )
 ]
 
