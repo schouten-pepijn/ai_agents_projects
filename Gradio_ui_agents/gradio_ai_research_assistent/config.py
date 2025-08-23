@@ -24,7 +24,8 @@ class Config:
         get_graph():
             Builds and returns a graph instance using the `build_graph` function from the `graph` module.
     """
-    model: str = os.environ["MODEL_SMALL"]
+    # model: str = os.environ["MODEL_SMALL"]
+    model: str = os.environ["MODEL_LARGE"]
     base_url: str = os.environ["BASE_URL"]
     tavily_api_key: str = os.environ["TAVILY_API_KEY"]
     use_tavily: bool = os.environ.get("USE_TAVILY", False)

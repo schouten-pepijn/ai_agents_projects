@@ -1,4 +1,4 @@
-To lauch:
+To launch:
 python gui_chatbot_langchain/gradio_interface.py
 
 To chat:

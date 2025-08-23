@@ -16,7 +16,6 @@ import re
 load_dotenv(".env")
 
 # MODEL = os.environ["MODEL_SMALL"]
-# MODEL = os.environ["MODEL_MEDIUM"]
 MODEL = os.environ["MODEL_LARGE"]
 
 BASE_URL = os.environ["BASE_URL"]
