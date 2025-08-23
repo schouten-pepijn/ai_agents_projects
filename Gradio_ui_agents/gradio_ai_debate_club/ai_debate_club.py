@@ -145,7 +145,7 @@ def moderator_judges_stream(state: DebateState, chat_history: List) -> Iterator[
     
     messages = mod_judge_tpl.format_messages(topic=state["topic"], pro_text=pro_text, con_text=con_text)
     
-    speaker_name = f"Moderator (Round {r+1})"
+    speaker_name = f"⚖️ Moderator (Round {r+1})"
     
     final_content = ""
     for updated_chat, content in stream_llm_response(llm_mod, messages, speaker_name, chat_history):
@@ -157,10 +157,13 @@ def moderator_judges_stream(state: DebateState, chat_history: List) -> Iterator[
     rationale = ""
     for line in judge.splitlines():
         s = line.strip()
+        
         if s.upper().startswith("WINNER:"):
             w = s.split(":", 1)[1].strip().lower()
+            
             if w in ("pro", "con", "tie"):
                 winner = w
+                
         if s.upper().startswith("RATIONALE:"):
             rationale = s.split(":", 1)[1].strip()
             
@@ -190,48 +193,48 @@ def finalize_stream(state: DebateState) -> Iterator[str]:
 
 
 def run_debate_stream(topic: str, rounds: int):
-    topic = (topic or '').strip()
+    topic = (topic or "").strip()
     if not topic:
-        yield [], '', ''
+        yield [], "", ""
         return
 
     init: DebateState = {
-        'topic': topic,
-        'round_idx': 0,
-        'max_rounds': max(2, int(rounds)),
-        'transcript': [],
-        'rationale': [],
-        'winner_per_round': [],
-        'final_summary': None
+        "topic": topic,
+        "round_idx": 0,
+        "max_rounds": max(2, int(rounds)),
+        "transcript": [],
+        "rationale": [],
+        "winner_per_round": [],
+        "final_summary": None
     }
     chat_history: List[List[str]] = []
     state = init
 
-    starter = random.choice(['pro', 'con'])
-    total_rounds = state['max_rounds']
+    starter = random.choice(["pro", "con"])
+    total_rounds = state["max_rounds"]
     
     for r in range(total_rounds):
-        state['round_idx'] = r
+        state["round_idx"] = r
         
-        if (r % 2 == 0 and starter == 'pro') or (r % 2 == 1 and starter == 'con'):
-            ordering = ['pro', 'con', 'mod']
+        if (r % 2 == 0 and starter == "pro") or (r % 2 == 1 and starter == "con"):
+            ordering = ["pro", "con", "mod"]
             
         else:
-            ordering = ['con', 'pro', 'mod']
+            ordering = ["con", "pro", "mod"]
 
         for role in ordering:
-            display_role = 'Moderator' if role == 'mod' else role.capitalize()
+            display_role = "Moderator" if role == "mod" else role.capitalize()
             yield chat_history, f"Round {r+1}/{total_rounds} - {display_role} speaking...", ""
             
-            if role == 'pro':
+            if role == "pro":
                 for updated_chat, _ in pro_speaks_stream(state, chat_history):
                     yield updated_chat, f"Round {r+1}/{total_rounds} - {display_role} speaking...", ""
             
-            elif role == 'con':
+            elif role == "con":
                 for updated_chat, _ in con_speaks_stream(state, chat_history):
                     yield updated_chat, f"Round {r+1}/{total_rounds} - {display_role} speaking...", ""
             
-            elif role == 'mod':
+            elif role == "mod":
                 for updated_chat, _ in moderator_judges_stream(state, chat_history):
                     yield updated_chat, f"Round {r+1}/{total_rounds} - {display_role} speaking...", ""
 
