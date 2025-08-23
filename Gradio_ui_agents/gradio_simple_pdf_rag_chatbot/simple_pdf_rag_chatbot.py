@@ -52,7 +52,7 @@ embedder = OllamaEmbeddings(
 )
 
 
-def load_pdf_docs(path: str) -> List[Document]:
+def load_pdf_docs(path: str, file_label: str) -> List[Document]:
     reader = PdfReader(path)
     docs: List[Document] = []
     
@@ -63,42 +63,62 @@ def load_pdf_docs(path: str) -> List[Document]:
         if not text:
             continue
         
-        docs.append(Document(page_content=text, metadata={"page": i+1}))
+        docs.append(Document(
+            page_content=text,
+            metadata={"page": i+1, "full_page": text, "file": file_label}
+        ))
     
     return docs
 
 def chunk_docs(docs: List[Document]) -> List[Document]:
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=750,
-        chunk_overlap=50,
+        chunk_size=800,
+        chunk_overlap=120,
         length_function=len,
         add_start_index=True
     )
     
     chunks = splitter.split_documents(docs)
     for c in chunks:
-        c.metadata["full_page"] = c.metadata.get("full_page") or ""
+        if "full_page" not in c.metadata:
+            c.metadata["full_page"] = ""
+        
+        if "file" not in c.metadata:
+            c.metadata["file"] = "unknown"
 
     return chunks
 
 SESSION_VS: Dict[str, FAISS] = {}
         
         
-def ingest_pdf(file_obj):
-    if file_obj is None:
-        return "", "Upload a PDF file."
-
+def ingest_pdfs(file_objs):
+    if not file_objs:
+        return "", "Upload one or more PDFs."
+    
     sid = str(uuid.uuid4())
-    pages = load_pdf_docs(file_obj.name)
+    all_chunks: List[Document] = []
+    files_list: List[str] = []
     
-    if not pages:
-        return "", "No text found in the PDF."
+    for f in file_objs:
+        fname = os.path.basename(getattr(f, "name", getattr(f, "orig_name", "upload.pdf")))
+        files_list.append(fname)
+        pages = load_pdf_docs(f.name, file_label=fname)
+        
+        if not pages:
+            continue
+        
+        chunks = chunk_docs(pages)
+        all_chunks.extend(chunks)
+        
+    if not all_chunks:
+        return "", "No extractable text found."
     
-    chunks = chunk_docs(pages)
-    vs = FAISS.from_documents(chunks, embedder)
+    vs = FAISS.from_documents(all_chunks, embedder)
     SESSION_VS[sid] = vs
     
-    return sid, f"Indexed {len(chunks)} chunks from {len(pages)} pages."
+    uniq_files = ", ".join(sorted(set(files_list)))
+    
+    return sid, f"Indexed {len(all_chunks)} chunks from {len(set(files_list))} file(s): {uniq_files}"
 
 
 _SENT_SPLIT = re.compile(r"(?<=[\.\?\!])\s+")
@@ -132,7 +152,6 @@ def _make_snippet(full_page: str, chunk_text: str, terms: List[str], window_sent
         
     matches = []
     tl = [t.lower() for t in terms]
-    
     for i, s in enumerate(sentences):
         s_low = s.lower()
         
@@ -178,7 +197,8 @@ def format_context(chunks: List[Document]) -> str:
     
     for i, d in enumerate(chunks, start=1):
         page = d.metadata.get("page", "?")
-        blocks.append(f"[{i}] (p.{page}) {d.page_content}")
+        file = d.metadata.get("file", "unknown")
+        blocks.append(f"[{i}] ({file}, p.{page}) {d.page_content}")
 
     return "\n\n".join(blocks)
 
@@ -209,7 +229,7 @@ with gr.Blocks(title="PDF RAG Chatbot") as rag_pdf_app:
     gr.Markdown("### PDF RAG Chatbot\nUpload a PDF, ask a question, get answers with quotes and page references.")
     
     with gr.Row():
-        file = gr.File(label="PDF Upload", file_types=[".pdf"])
+        file = gr.File(label="PDF Upload", file_types=[".pdf"], file_count="multiple")
         
     with gr.Row():
         ingest_btn = gr.Button("Index")
@@ -224,7 +244,7 @@ with gr.Blocks(title="PDF RAG Chatbot") as rag_pdf_app:
     highlights = gr.HTML(label="Sources with highlights")
     
     ingest_btn.click(
-        ingest_pdf,
+        ingest_pdfs,
         inputs=[file],
         outputs=[session_id, status]
     )
