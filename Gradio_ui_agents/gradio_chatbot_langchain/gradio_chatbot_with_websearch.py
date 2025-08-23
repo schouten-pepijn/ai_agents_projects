@@ -32,7 +32,15 @@ model = ChatOllama(
 search = DuckDuckGoSearchRun()
 
 def ddgs_search(query: str) -> str:
-    """Perform a search using DuckDuckGo Search API."""
+    """
+    Perform a search using the DuckDuckGo Search API.
+
+    Args:
+        query (str): The search query string.
+
+    Returns:
+        str: A formatted string containing search results, or a message indicating no results were found.
+    """
     results = []
     with DDGS() as ddgs:
         for r in ddgs.text(query, max_results=5):
@@ -94,7 +102,17 @@ agent_executor = AgentExecutor(
 
 # Function to stream responses
 def stream_response(message: str, language: str, accent: str) -> Iterator[str]:
-    """Call the model and yield the tokens as they're generated."""
+    """
+    Stream the response from the language model.
+
+    Args:
+        message (str): The user message to process.
+        language (str): The language in which the assistant should respond.
+        accent (str): The accent style for the assistant's response.
+
+    Yields:
+        str: Chunks of the assistant's response streamed from the language model.
+    """
     messages = [HumanMessage(content=message)]
     
     trimmed_messages = trim_messages(
@@ -120,7 +138,18 @@ def stream_response(message: str, language: str, accent: str) -> Iterator[str]:
 
 # Function to get response with web search
 def get_web_response(message: str, language: str, accent: str, conversation_history: list = None) -> Dict[str, Any]:
-    """Call the agent with web search capability and return response with metadata."""
+    """
+    Get a response from the assistant using web search if enabled.
+
+    Args:
+        message (str): The user message to process.
+        language (str): The language in which the assistant should respond.
+        accent (str): The accent style for the assistant's response.
+        conversation_history (list, optional): The conversation history for context.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing the assistant's response, whether web search was used, sources, and any error encountered.
+    """
     try:
         # Prepare chat history if available
         chat_history = []
@@ -166,7 +195,17 @@ def get_web_response(message: str, language: str, accent: str, conversation_hist
 
 # Function to format response with source information
 def format_response_with_sources(response: str, used_web_search: bool, sources: list) -> str:
-    """Format the response with source information and indicators."""
+    """
+    Format the assistant's response with source information.
+
+    Args:
+        response (str): The assistant's response.
+        used_web_search (bool): Whether web search was used to generate the response.
+        sources (list): A list of sources used for the response.
+
+    Returns:
+        str: The formatted response with source information.
+    """
     formatted_response = response
     
     # Add indicator of information source
@@ -258,11 +297,38 @@ with gr.Blocks(title="Chatbot with language and web search") as demo:
     
     # Event handlers
     def user(user_message, history, thread_id, language, accent, enable_search):
+        """
+        Handle user input and update the conversation history.
+
+        Args:
+            user_message: The user's message.
+            history: The conversation history.
+            thread_id: The unique thread ID for the session.
+            language: The selected language for the assistant.
+            accent: The selected accent for the assistant.
+            enable_search: Whether web search is enabled.
+
+        Returns:
+            Tuple: Updated message, history, and thread ID.
+        """
         # Update history with user message
         history = history + [(user_message, None)]
         return "", history, thread_id
 
     def bot(history, thread_id, language, accent, enable_search):
+        """
+        Generate a response from the assistant based on user input.
+
+        Args:
+            history: The conversation history.
+            thread_id: The unique thread ID for the session.
+            language: The selected language for the assistant.
+            accent: The selected accent for the assistant.
+            enable_search: Whether web search is enabled.
+
+        Yields:
+            Updated conversation history with the assistant's response.
+        """
         # Extract the last user message
         user_message = history[-1][0]
         
@@ -304,6 +370,12 @@ with gr.Blocks(title="Chatbot with language and web search") as demo:
             yield history
     
     def reset_thread():
+        """
+        Reset the conversation thread.
+
+        Returns:
+            Tuple: An empty conversation history and a new thread ID.
+        """
         new_thread_id = str(uuid.uuid4())
         return [], new_thread_id
     
