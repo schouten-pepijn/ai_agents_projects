@@ -383,7 +383,7 @@ def gr_run(request: str, attempts: int):
 
 with gr.Blocks(title="Python Coding Assistant") as demo:
     
-    gr.Markdown("## Python Coding Assistant - LangGraph Repair Loop")
+    gr.Markdown("## Python STDLIB Coding Assistant with Repair Loop")
     
     with gr.Row():
         req = gr.Textbox(label="Your request", lines=5, placeholder="Example: Generate a Python program that creates ASCII art from an image.")
