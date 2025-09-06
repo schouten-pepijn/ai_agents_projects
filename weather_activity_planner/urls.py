@@ -1,0 +1,6 @@
+
+GEOAPIFY_AUTOCOMPLETE_URL = "https://api.geoapify.com/v1/geocode/autocomplete"
+GEOAPIFY_SEARCH_URL = "https://api.geoapify.com/v1/geocode/search"
+OPENMETEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+TICKETMASTER_EVENTS_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
+

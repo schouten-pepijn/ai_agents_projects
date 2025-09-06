@@ -1,0 +1,197 @@
+import os
+import math
+import asyncio
+import httpx
+from datetime import datetime
+from typing import List, Tuple
+from tenacity import retry, stop_after_attempt, wait_exponential
+from models import City, WeatherSlot, Event
+from config import config
+import urls
+from helpers import to_zulu, safe_get
+
+# GEOAPIFY
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
+async def geoapify_autocomplete_city(query: str) -> List[dict]:    
+    url = urls.GEOAPIFY_AUTOCOMPLETE_URL
+    params = {
+        "text": query,
+        "type": "city",
+        "limit": 5,
+        "apiKey": config.GEOAPP_KEY
+    }
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+    
+        return r.json().get("features", [])
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
+async def geoapify_forward_geocode(query: str) -> City:
+    url = urls.GEOAPIFY_SEARCH_URL
+    params = {
+        "text": query,
+        "limit": 1,
+        "apiKey": config.GEOAPP_KEY
+    }
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+        
+        f = r.json()["features"][0]
+        lon, lat = f["geometry"]["coordinates"]
+        prop = f["properties"]
+
+    return City(
+        query=query,
+        lat=float(lat),
+        lon=float(lon),
+        country=prop.get("country_code"),
+        label=prop.get("formatted")
+    )
+
+
+# OPENMETEO
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
+async def open_meteo_forecast(lat: float, lon: float) -> List[WeatherSlot]:
+    url = urls.OPENMETEO_FORECAST_URL
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "timezone": "UTC",
+        "hourly": ["temperature_2m", "precipitation", "precipitation_probability", "wind_speed_10m", "cloud_cover_low"],
+	    "models": "best_match",
+    }
+    
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+        
+        h = r.json()["hourly"]
+        
+    out=[]
+    for i, iso_ts in enumerate(h["time"]):
+        out.append(
+            WeatherSlot(
+                dt=datetime.fromisoformat(iso_ts.replace("Z","+00:00")),
+                temp=float(h["temperature_2m"][i]),
+                precip_mm=float(h["precipitation"][i]),
+                pop=float(h["precipitation_probability"][i]),
+                wind_ms=float(h["wind_speed_10m"][i]),
+                clouds_pct=int(h["cloud_cover_low"][i]),
+            )
+        )
+        
+    return out
+
+
+# TICKETMASTER
+def _parse_ticketmaster_event(e)->Event:
+    venues = safe_get(e, "_embedded", "venues", default=[]) or [{}]
+    v = venues[0] if isinstance(venues, list) else venues
+    
+    loc = v.get("location", {}) or {}
+    lat = loc.get("latitude")
+    lon = loc.get("longitude")
+
+    start_iso = safe_get(e, "dates", "start", "dateTime")
+    start = (
+        datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+        if start_iso
+        else None
+    )
+
+    return Event(
+        id=e["id"],
+        source="ticketmaster",
+        name=e.get("name", ""),
+        description=e.get("info") or e.get("pleaseNote"),
+        category=safe_get(e, "classifications", default=[{}])[0]
+                 .get("segment", {})
+                 .get("name"),
+        start=start,
+        end=None,
+        venue=v.get("name"),
+        indoor=None,
+        lat=float(lat) if lat else None,
+        lon=float(lon) if lon else None,
+        url=e.get("url"),
+    )
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
+async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, max_pages: int = 5) -> List[Event]:
+    if not config.TMK:
+        return []
+
+    url = urls.TICKETMASTER_EVENTS_URL
+    params = {
+        "apikey": config.TMK,
+        "latlong": f"{lat},{lon}",
+        "radius": 80,
+        "unit": "km",
+        "startDateTime": to_zulu(start_iso),
+        "endDateTime": to_zulu(end_iso),
+        "size": 10,
+        "sort": "date,asc",
+        "CountryCode": "NL",
+        # "classificationName": "music"
+    }
+    
+    events: List[Event] = []
+    page = 0
+    
+    async with httpx.AsyncClient(timeout=15) as c:
+        while page < max_pages:
+            cur_params = dict(params, page=page)
+            r = await c.get(url, params=cur_params, headers={"Accept": "application/json"})
+            
+            if r.status_code == 429:
+                retry_after = int(r.headers.get("Retry-After", "1"))
+                
+                await asyncio.sleep(retry_after)
+                
+                raise httpx.HTTPStatusError("Rate limit exceeded", request=r.request, response=r)
+            
+            r.raise_for_status()
+            js = r.json()
+            
+            embedded = js.get("_embedded", {})
+            raw_events = embedded.get("events", [])
+            
+            if not raw_events:
+                break
+            
+            events.extend(_parse_ticketmaster_event(e) for e in raw_events)
+            
+            links = js.get("_links", {})
+            has_next = "next" in links
+            
+            if not has_next:
+                break
+            
+            page += 1
+    
+    return events
+                
+            
+
+
+query = "Amsterdam"
+
+feats = asyncio.run(geoapify_autocomplete_city(query))
+
+state = {}
+if feats:
+    lon, lat = feats[0]["geometry"]["coordinates"]
+    props = feats[0]["properties"]
+    state["city"] = City(query=query, lat=float(lat), lon=float(lon), country=props.get("country_code"), label=props.get("formatted"))
+else:
+    state["city"] = asyncio.run(geoapify_forward_geocode(query))
+
+forecast = asyncio.run(open_meteo_forecast(state["city"].lat, state["city"].lon))
+
+events = asyncio.run(ticketmaster_events(lat=state["city"].lat, lon=state["city"].lon, start_iso=forecast[0].dt.isoformat(), end_iso=forecast[-1].dt.isoformat()))
+
+print("hello")
