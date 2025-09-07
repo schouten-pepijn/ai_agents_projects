@@ -9,5 +9,38 @@ class Config:
     # OM = os.getenv("OM_API_KEY")  # Open Meteo
     TMK = os.getenv("TMK_API_KEY")  # Ticket Master
     GEOAPP_KEY = os.getenv("GEOAPP_API_KEY")  # Geoapify
+    LLM_MODEL = (
+        os.getenv("MODEL_LARGE")
+        or os.getenv("gpt-3.5-turbo")
+        or os.getenv("MODEL_SMALL")
+    )
+    BASE_URL = os.getenv("BASE_URL")  # Ollama base URL
+
+
+@dataclass(frozen=True)
+class Constants:
+    OUTDOOR_HITS = [
+        "park",
+        "stadium",
+        "festival",
+        "open air",
+        "outdoor",
+        "beach",
+        "market",
+        "zoo",
+        "garden",
+    ]
+    INDOOR_HINTS = [
+        "theater",
+        "cinema",
+        "club",
+        "museum",
+        "hall",
+        "arena",
+        "indoor",
+        "gallery",
+        "exhibition",
+    ]
 
 config = Config()
+constants = Constants()

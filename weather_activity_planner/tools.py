@@ -176,22 +176,3 @@ async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: s
     return events
                 
             
-
-
-query = "Amsterdam"
-
-feats = asyncio.run(geoapify_autocomplete_city(query))
-
-state = {}
-if feats:
-    lon, lat = feats[0]["geometry"]["coordinates"]
-    props = feats[0]["properties"]
-    state["city"] = City(query=query, lat=float(lat), lon=float(lon), country=props.get("country_code"), label=props.get("formatted"))
-else:
-    state["city"] = asyncio.run(geoapify_forward_geocode(query))
-
-forecast = asyncio.run(open_meteo_forecast(state["city"].lat, state["city"].lon))
-
-events = asyncio.run(ticketmaster_events(lat=state["city"].lat, lon=state["city"].lon, start_iso=forecast[0].dt.isoformat(), end_iso=forecast[-1].dt.isoformat()))
-
-print("hello")
