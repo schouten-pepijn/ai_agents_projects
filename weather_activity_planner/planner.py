@@ -1,6 +1,6 @@
-from models import Event, WeatherSlot, Plan, PlanItem, City
+from models import Event, Place, WeatherSlot, Plan, PlanItem, City
 from config import constants
-from typing import List, Optional
+from typing import List
 from datetime import datetime, timezone
 
 
@@ -83,3 +83,25 @@ def build_plan(city: City, events: List[Event], wx: List[WeatherSlot]) -> Plan:
     items.sort(key=lambda x: (-x.suitability, x.slot_dt))
     
     return Plan(city=city, items=items)
+
+
+def append_pois_when_sparse(plan: Plan, places: list[Place], wx: list[WeatherSlot], k:int=6) -> None:
+    
+    good = [it for it in plan.items if it.suitability >= 0.6]
+    if len(good) >= k: 
+        return
+    
+   
+    add_n = max(0, k - len(good))
+
+    w = wx[0]
+    base = 0.6 - min(0.2, w.precip_mm/5 + w.wind_ms/25)
+    base = max(0.45, min(0.75, base))
+    
+    for p in places[:add_n]:
+        plan.items.append(PlanItem(
+            event_id=f"poi::{p.id}",
+            suitability=base,
+            reason=f"POI · {p.category.replace('.', ' ')}",
+            slot_dt=wx[0].dt
+        ))

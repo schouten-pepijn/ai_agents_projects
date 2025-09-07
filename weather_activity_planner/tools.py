@@ -5,12 +5,12 @@ import httpx
 from datetime import datetime
 from typing import List, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential
-from models import City, WeatherSlot, Event
+from models import City, WeatherSlot, Event, Place
 from config import config
 import urls
 from helpers import to_zulu, safe_get
 
-# GEOAPIFY
+# GEOAPIFY - GEOCODING
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
 async def geoapify_autocomplete_city(query: str) -> List[dict]:    
     url = urls.GEOAPIFY_AUTOCOMPLETE_URL
@@ -52,7 +52,7 @@ async def geoapify_forward_geocode(query: str) -> City:
     )
 
 
-# OPENMETEO
+# OPENMETEO - WEATHER
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
 async def open_meteo_forecast(lat: float, lon: float) -> List[WeatherSlot]:
     url = urls.OPENMETEO_FORECAST_URL
@@ -84,6 +84,48 @@ async def open_meteo_forecast(lat: float, lon: float) -> List[WeatherSlot]:
         )
         
     return out
+
+
+# GEOAPIFY - PLACES
+def parse_geoapify_place(f: dict) -> Place:
+    props = f.get("properties", {})
+    lon, lat = f["geometry"]["coordinates"]
+    
+    return Place(
+        id=str(props.get("place_id") or props.get("osm_id") or props.get("name")),
+        name=props.get("name") or props.get("formatted") or "Unknown",
+        category=props.get("categories", ["poi"])[0] if props.get("categories") else "poi",
+        lat=float(lat), lon=float(lon),
+        address=props.get("formatted"),
+        url=props.get("website")
+    )
+    
+async def geoapify_places(lat: float, lon: float, categories: str, radius_km: int = 5) -> List[dict]:
+    url = urls.GEOAPIFY_PLACES_URL
+    
+    # Ensure radius is within reasonable limits (Geoapify supports up to 20km)
+    radius_km = min(radius_km, 20)
+    radius_meters = int(radius_km * 1000)
+    
+    params = {
+        "categories": categories,
+        "filter": f"circle:{lon},{lat},{radius_meters}",
+        "limit": 50,
+        "apiKey": config.GEOAPP_KEY
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(url, params=params)
+            r.raise_for_status()
+            return r.json().get("features", [])
+    except Exception as e:
+        print(f"Geoapify places API error: {e}")
+        if hasattr(e, 'response') and e.response:
+            print(f"Response status: {e.response.status_code}")
+            print(f"Response text: {e.response.text}")
+        # Return empty list instead of failing the entire request
+        raise e
 
 
 # TICKETMASTER
@@ -121,7 +163,7 @@ def _parse_ticketmaster_event(e)->Event:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
-async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, max_pages: int = 5) -> List[Event]:
+async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, radius_km: int = 10, max_pages: int = 5) -> List[Event]:
     if not config.TMK:
         return []
 
@@ -129,11 +171,11 @@ async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: s
     params = {
         "apikey": config.TMK,
         "latlong": f"{lat},{lon}",
-        "radius": 80,
+        "radius": radius_km,  # Use user-specified radius
         "unit": "km",
         "startDateTime": to_zulu(start_iso),
         "endDateTime": to_zulu(end_iso),
-        "size": 10,
+        "size": 20,  # Increased size to get more events
         "sort": "date,asc",
         "CountryCode": "NL",
         # "classificationName": "music"

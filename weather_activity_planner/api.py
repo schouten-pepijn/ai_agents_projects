@@ -19,6 +19,7 @@ async def plan(q: Query):
         return {
             "city": result["city"].model_dump(),
             "events": [e.model_dump() for e in result["events"]],
+            "places": [p.model_dump() for p in result["places"]],
             "plan": [i.model_dump() for i in result["plan"].items],
             "narrative": result["narrative"],
         }

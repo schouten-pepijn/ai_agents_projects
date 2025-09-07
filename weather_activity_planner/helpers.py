@@ -7,7 +7,7 @@ def to_zulu(dt_iso: str) -> str:
         dt_iso.replace("Z", "+00:00")
     ).astimezone(timezone.utc)
     
-    # Ticketmaster prefers 'YYYY-MM-DDTHH:MM:SSZ'
+    # 'YYYY-MM-DDTHH:MM:SSZ'
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 def safe_get(d: dict, *path, default=None):
@@ -23,3 +23,5 @@ def safe_get(d: dict, *path, default=None):
             return default
         
     return cur
+
+

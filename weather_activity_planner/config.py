@@ -41,6 +41,16 @@ class Constants:
         "gallery",
         "exhibition",
     ]
+    GEOAPIFY_CATEGORIES = ",".join([
+        "entertainment.museum",
+        "entertainment.zoo",
+        "entertainment.theme_park",
+        "entertainment.aquarium",
+        "leisure.park",
+        "leisure.garden",
+        "tourism.sights",
+        "commercial.shopping_mall"
+    ])
 
 config = Config()
 constants = Constants()

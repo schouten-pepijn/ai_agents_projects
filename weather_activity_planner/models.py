@@ -34,7 +34,16 @@ class Event(BaseModel):
     lat: Optional[float] 
     lon: Optional[float] 
     url: Optional[str]
-    
+
+
+class Place(BaseModel):
+    id: str 
+    name: str
+    category: str
+    lat: float
+    lon: float
+    address: Optional[str] = None
+    url: Optional[str] = None
 
 class PlanItem(BaseModel):
     event_id: str
