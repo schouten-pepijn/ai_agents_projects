@@ -74,6 +74,7 @@ async def events_node(state: State) -> State:
     
     tm_events = await ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
     
+    # Rank events by similarity to user preferences if provided
     if activity_types:
         pref_text = ", ".join(activity_types).strip().lower()
         
@@ -89,6 +90,7 @@ async def events_node(state: State) -> State:
         ]
         doc_vecs = embedder.embed_documents(event_texts)
         
+        # calculate cosine similarities
         ev_matrix = np.vstack(doc_vecs)
         pref_norm = np.linalg.norm(query_vec)
         ev_norms = np.linalg.norm(ev_matrix, axis=1)
@@ -97,10 +99,13 @@ async def events_node(state: State) -> State:
         
         ranked_ids = np.argsort(-sims)
         ranked_events = [tm_events[i] for i in ranked_ids if sims[i] > 0.1]
+        
+        
     
     else:
         ranked_events = tm_events    
         
+    # Deduplicate events by (name, start time)
     seen = set()
     merged = []
     for e in ranked_events:

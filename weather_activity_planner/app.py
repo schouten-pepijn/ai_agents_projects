@@ -92,10 +92,10 @@ st.divider()
 # Plan button with some styling
 col_button, col_info = st.columns([1, 2])
 with col_button:
-    plan_button = st.button("🎯 Plan My Activities", type="primary", use_container_width=True)
+    plan_button = st.button("🎯 Plan My Activities", type="primary", width="stretch")
 
 with col_info:
-    st.info("**Tip**: The AI will analyze weather conditions and your preferences to recommend the best activities for each day!")
+    st.info("**Note**: The AI will analyze weather conditions and your preferences to recommend the best activities for each day!")
 
 if plan_button:
     # Convert selected category names to API category strings
@@ -139,7 +139,7 @@ if plan_button:
                     st.subheader("Recommended Activities")
                     st.dataframe(
                         recommended_df[["name","start","venue","suitability","reason","url"]].sort_values("suitability", ascending=False),
-                        use_container_width=True,
+                        width="stretch",
                         column_config={
                             "name": "Activity",
                             "start": st.column_config.DatetimeColumn("Start Time"),
@@ -159,7 +159,7 @@ if plan_button:
                 st.subheader("All Available Events")
                 st.dataframe(
                     events_df[["name", "start", "end", "venue", "category", "description", "url"]],
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "name": "Event Name",
                         "start": st.column_config.DatetimeColumn("Start"),
@@ -179,7 +179,7 @@ if plan_button:
                 st.subheader("All Places Found")
                 st.dataframe(
                     places_df[["name", "category", "address", "url"]],
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "name": "Place Name",
                         "category": "Category",

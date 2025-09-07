@@ -7,15 +7,16 @@ load_dotenv(".env")
 @dataclass(frozen=True)
 class Config:
     # OM = os.getenv("OM_API_KEY")  # Open Meteo
-    TMK = os.getenv("TMK_API_KEY")  # Ticket Master
-    GEOAPP_KEY = os.getenv("GEOAPP_API_KEY")  # Geoapify
-    LLM_MODEL = (
+    TMK: str = os.getenv("TMK_API_KEY")  # Ticket Master
+    GEOAPP_KEY: str = os.getenv("GEOAPP_API_KEY")  # Geoapify
+    LLM_MODEL: str = (
         os.getenv("MODEL_LARGE")
         or os.getenv("gpt-3.5-turbo")
         or os.getenv("MODEL_SMALL")
     )
-    BASE_URL = os.getenv("BASE_URL")  # Ollama base URL
-    EMBED_MODEL = os.getenv("EMBED_MODEL") or "nomic-embed-text"
+    BASE_URL: str = os.getenv("BASE_URL")  # Ollama base URL
+    EMBED_MODEL: str = os.getenv("EMBED_MODEL") or "nomic-embed-text"
+    TICKETMASTER_ENABLED: bool = False
 
 
 @dataclass(frozen=True)

@@ -164,7 +164,8 @@ def _parse_ticketmaster_event(e)->Event:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
 async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, radius_km: int = 10, max_pages: int = 5) -> List[Event]:
-    if not config.TMK:
+    # Skip Ticketmaster API if disabled or no API key
+    if not getattr(config, 'TICKETMASTER_ENABLED', True) or not config.TMK:
         return []
 
     url = urls.TICKETMASTER_EVENTS_URL
