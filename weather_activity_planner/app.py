@@ -9,8 +9,23 @@ import pandas as pd
 import pydeck as pdk
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Event Planner", layout="wide")
-st.title("Weather + Event Planner (Open-Meteo + Geoapify + Ticketmaster)")
+st.set_page_config(page_title="Event Planner", layout="wide", page_icon="🌤️")
+
+st.title("🌤️ Weather + Event Planner")
+st.markdown("*Powered by Open-Meteo, Geoapify & Ticketmaster APIs*")
+
+st.markdown("""
+**Plan your perfect activities based on weather conditions and local events!**
+
+This tool helps you discover:
+- 🎪 **Events & Shows** from Ticketmaster
+- 📍 **Local Places** from Geoapify (restaurants, museums, parks, etc.)
+- 🌤️ **Weather-aware recommendations** using AI planning
+
+Simply enter your destination, dates, and preferences below to get started.
+""")
+
+st.divider()
 
 # Available place categories for selection
 PLACE_CATEGORIES = {
@@ -42,9 +57,9 @@ with col2:
     radius = st.slider(
         "Search radius (km)", 
         min_value=1, 
-        max_value=20, 
+        max_value=100, 
         value=10, 
-        help="Radius in kilometers to search for events around the city (max 20km)"
+        help="Radius in kilometers to search for events and places"
     )
     
     activity_types = st.multiselect(
@@ -72,7 +87,17 @@ preferences_text = st.text_area(
     help="The AI will consider these preferences when planning your activities"
 )
 
-if st.button("Plan"):
+st.divider()
+
+# Plan button with some styling
+col_button, col_info = st.columns([1, 2])
+with col_button:
+    plan_button = st.button("🎯 Plan My Activities", type="primary", use_container_width=True)
+
+with col_info:
+    st.info("**Tip**: The AI will analyze weather conditions and your preferences to recommend the best activities for each day!")
+
+if plan_button:
     # Convert selected category names to API category strings
     selected_category_codes = [PLACE_CATEGORIES[cat] for cat in place_categories]
     
@@ -97,65 +122,205 @@ if st.button("Plan"):
         st.subheader(data["city"].get("label") or data["city"]["query"])
         st.write(data["narrative"])
 
-        ev = pd.DataFrame(data["events"])
-        plan = pd.DataFrame(data["plan"])
+        # Process events and plan data
+        events_df = pd.DataFrame(data["events"])
+        plan_df = pd.DataFrame(data["plan"])
+        places_df = pd.DataFrame(data.get("places", []))
         
-        df = ev.merge(plan, left_on="id", right_on="event_id", how="left")
+        # Create tabs for better organization
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Activity Plan", "🎪 All Events", "📍 All Places", "🗺️ Map View"])
         
-        st.dataframe(
-            df[["name","start","venue","suitability","reason","url"]].sort_values("suitability", ascending=False),
-            width="stretch"
-        )
-
-        df_map = df.dropna(subset=["lat","lon"])
+        with tab1:
+            if not events_df.empty and not plan_df.empty:
+                # Merge events with plan for recommended activities
+                recommended_df = events_df.merge(plan_df, left_on="id", right_on="event_id", how="inner")
+                
+                if not recommended_df.empty:
+                    st.subheader("Recommended Activities")
+                    st.dataframe(
+                        recommended_df[["name","start","venue","suitability","reason","url"]].sort_values("suitability", ascending=False),
+                        use_container_width=True,
+                        column_config={
+                            "name": "Activity",
+                            "start": st.column_config.DatetimeColumn("Start Time"),
+                            "venue": "Venue",
+                            "suitability": st.column_config.ProgressColumn("Suitability", min_value=0, max_value=1),
+                            "reason": "Why Recommended",
+                            "url": st.column_config.LinkColumn("More Info")
+                        }
+                    )
+                else:
+                    st.info("No activities matched your preferences for the selected dates.")
+            else:
+                st.info("No activity plan available.")
         
-        if not df_map.empty:
-            # Convert DataFrame to records for PyDeck
-            df_map_records = df_map.to_dict('records')
+        with tab2:
+            if not events_df.empty:
+                st.subheader("All Available Events")
+                st.dataframe(
+                    events_df[["name", "start", "end", "venue", "category", "description", "url"]],
+                    use_container_width=True,
+                    column_config={
+                        "name": "Event Name",
+                        "start": st.column_config.DatetimeColumn("Start"),
+                        "end": st.column_config.DatetimeColumn("End"),
+                        "venue": "Venue",
+                        "category": "Category",
+                        "description": "Description",
+                        "url": st.column_config.LinkColumn("Event Link")
+                    }
+                )
+                st.caption(f"Total events found: {len(events_df)}")
+            else:
+                st.info("No events found for your search criteria.")
+        
+        with tab3:
+            if not places_df.empty:
+                st.subheader("All Places Found")
+                st.dataframe(
+                    places_df[["name", "category", "address", "url"]],
+                    use_container_width=True,
+                    column_config={
+                        "name": "Place Name",
+                        "category": "Category",
+                        "address": "Address",
+                        "url": st.column_config.LinkColumn("Website")
+                    }
+                )
+                st.caption(f"Total places found: {len(places_df)}")
+            else:
+                st.info("No places found for your selected categories.")
+        
+        with tab4:
+            st.subheader("Interactive Map")
             
-            layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=df_map_records,
-                get_position='[lon, lat]',
-                get_radius=80,
-                get_fill_color='[255*(1-suitability), 255*suitability, 80]',
-                pickable=True,
-            )
+            # Prepare map layers
+            layers = []
             
-            view = pdk.ViewState(latitude=float(df_map.iloc[0]["lat"]), longitude=float(df_map.iloc[0]["lon"]), zoom=10)
+            # Events layer (recommended activities)
+            if not events_df.empty and not plan_df.empty:
+                events_with_plan = events_df.merge(plan_df, left_on="id", right_on="event_id", how="inner")
+                events_map_data = events_with_plan.dropna(subset=["lat", "lon"])
+                
+                if not events_map_data.empty:
+                    # Convert to dict for PyDeck
+                    events_records = events_map_data.to_dict('records')
+                    
+                    events_layer = pdk.Layer(
+                        "ScatterplotLayer",
+                        data=events_records,
+                        get_position='[lon, lat]',
+                        get_radius=120,
+                        get_fill_color='[255*(1-suitability), 255*suitability, 80, 180]',  # Green to red based on suitability
+                        pickable=True,
+                    )
+                    layers.append(events_layer)
             
-            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, tooltip={"text":"{name}\n{reason}"}))
+            # Places layer
+            if not places_df.empty:
+                places_map_data = places_df.dropna(subset=["lat", "lon"])
+                
+                if not places_map_data.empty:
+                    # Convert to dict for PyDeck
+                    places_records = places_map_data.to_dict('records')
+                    
+                    places_layer = pdk.Layer(
+                        "ScatterplotLayer",
+                        data=places_records,
+                        get_position='[lon, lat]',
+                        get_radius=60,
+                        get_fill_color='[70, 130, 180, 160]',  # Steel blue for places
+                        pickable=True,
+                    )
+                    layers.append(places_layer)
             
-        pois = pd.DataFrame(data.get("places", []))
-        if not pois.empty:
-            poi_layer = pdk.Layer(
-                "IconLayer",
-                data=pois.assign(icon="marker"),
-                get_icon="icon",
-                get_size=3,
-                get_position='[lon, lat]',
-                pickable=True,
-            )
-            
-            st.pydeck_chart(pdk.Deck(
-                layers=[layer, poi_layer] if not df_map.empty else [poi_layer],
-                initial_view_state=view,
-                tooltip={"text":"{name}\n{category}\n{address}"}
-            ))
+            # Set up map view
+            if layers:
+                # Use city coordinates as center, or first available point
+                city_lat = data["city"].get("lat", 52.370216)
+                city_lon = data["city"].get("lon", 4.895168)
+                
+                view_state = pdk.ViewState(
+                    latitude=city_lat,
+                    longitude=city_lon,
+                    zoom=11,
+                    pitch=0
+                )
+                
+                # Create the map
+                st.pydeck_chart(pdk.Deck(
+                    layers=layers,
+                    initial_view_state=view_state,
+                    tooltip={
+                        "html": """
+                        <b>{name}</b><br/>
+                        <i>{category}</i><br/>
+                        {venue}<br/>
+                        {address}<br/>
+                        {reason}
+                        """,
+                        "style": {
+                            "backgroundColor": "steelblue",
+                            "color": "white",
+                            "border": "1px solid white",
+                            "borderRadius": "5px",
+                            "padding": "10px"
+                        }
+                    }
+                ))
+                
+                # Add legend
+                st.markdown("""
+                **Map Legend:**
+                - 🟢 **Green circles**: High suitability recommended activities
+                - 🔴 **Red circles**: Lower suitability recommended activities  
+                - 🔵 **Blue circles**: Available places/points of interest
+                """)
+                
+                # Map statistics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    recommended_count = len(events_with_plan) if 'events_with_plan' in locals() else 0
+                    st.metric("Recommended Activities", recommended_count)
+                with col2:
+                    places_count = len(places_df) if not places_df.empty else 0
+                    st.metric("Places Found", places_count)
+                with col3:
+                    total_events = len(events_df) if not events_df.empty else 0
+                    st.metric("Total Events", total_events)
+            else:
+                st.info("No map data available. Make sure events or places have location coordinates.")
     
     except requests.exceptions.HTTPError as e:
-        st.error(f"API Error: {e}")
+        st.error("**API Error Occurred**")
+        st.write(f"**Status Code**: {e.response.status_code if hasattr(e, 'response') else 'Unknown'}")
         
         if hasattr(e, 'response') and e.response:
             try:
                 error_detail = e.response.json()
-                st.error(f"Error details: {error_detail}")
+                st.json(error_detail)
             except Exception:
-                st.error(f"Response: {e.response.text}")
+                with st.expander("View Raw Response"):
+                    st.code(e.response.text)
+        
+        st.info("**Troubleshooting Tips:**\n- Check if your search location is valid\n- Try a different date range\n- Verify API keys are properly configured")
                 
     except requests.exceptions.RequestException as e:
-        st.error(f"Connection Error: {e}")
-        st.info("Make sure the API server is running on http://localhost:8000")
+        st.error("**Connection Error**")
+        st.write("Unable to connect to the planning service.")
         
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info("**Check if the API server is running:**\n- Server should be on `http://localhost:8000`\n- Try restarting the API service")
+        with col2:
+            if st.button("Retry Connection"):
+                st.rerun()
+                
     except Exception as e:
-        st.error(f"Unexpected Error: {e}")
+        st.error("**Unexpected Error**")
+        st.write("Something unexpected happened during planning.")
+        
+        with st.expander("View Error Details"):
+            st.code(str(e))
+        
+        st.info("**What you can try:**\n- Refresh the page and try again\n- Simplify your search criteria\n- Check the API server logs for more details")

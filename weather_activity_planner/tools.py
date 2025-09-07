@@ -1,9 +1,7 @@
-import os
-import math
 import asyncio
 import httpx
 from datetime import datetime
-from typing import List, Tuple
+from typing import List
 from tenacity import retry, stop_after_attempt, wait_exponential
 from models import City, WeatherSlot, Event, Place
 from config import config
@@ -102,15 +100,15 @@ def parse_geoapify_place(f: dict) -> Place:
     
 async def geoapify_places(lat: float, lon: float, categories: str, radius_km: int = 5) -> List[dict]:
     url = urls.GEOAPIFY_PLACES_URL
-    
-    # Ensure radius is within reasonable limits (Geoapify supports up to 20km)
-    radius_km = min(radius_km, 20)
+
+    # Ensure radius is within reasonable limits (Geoapify supports up to 10km)
+    radius_km = min(radius_km, 10)
     radius_meters = int(radius_km * 1000)
     
     params = {
         "categories": categories,
         "filter": f"circle:{lon},{lat},{radius_meters}",
-        "limit": 50,
+        "limit": 20,
         "apiKey": config.GEOAPP_KEY
     }
     
@@ -119,8 +117,10 @@ async def geoapify_places(lat: float, lon: float, categories: str, radius_km: in
             r = await c.get(url, params=params)
             r.raise_for_status()
             return r.json().get("features", [])
+
     except Exception as e:
         print(f"Geoapify places API error: {e}")
+        
         if hasattr(e, 'response') and e.response:
             print(f"Response status: {e.response.status_code}")
             print(f"Response text: {e.response.text}")

@@ -28,7 +28,7 @@ def get_llm():
     return ChatOllama(
         model=config.LLM_MODEL,
         base_url=config.BASE_URL,
-        temperature=0.7,
+        temperature=0.6,
         max_retries=3
     )
     
@@ -61,7 +61,7 @@ async def events_node(state: State) -> State:
     
  
     preferences = q.preferences or {}
-    radius_km = preferences.get("radius_km", 10)
+    radius_km = preferences.get("radius_km", 20)
     activity_types = preferences.get("activity_types", [])
     
     tm = await ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
@@ -118,12 +118,14 @@ async def places_node(state: State) -> State:
     
     preferences = q.preferences or {}
     # Limit radius to reasonable bounds for Geoapify API
-    radius_km = min(preferences.get("radius_km", 10), 20)
+    radius_km = min(preferences.get("radius_km", 10), 10)
     
     # Use selected place categories from UI, or default to predefined set
     selected_categories = preferences.get("place_categories", [])
+    
     if selected_categories:
         categories_str = ",".join(selected_categories)
+        
     else:
         categories_str = constants.GEOAPIFY_CATEGORIES
 
@@ -150,8 +152,10 @@ async def narrative_node(state: State) -> State:
     def _label(item) -> str:
         if item.event_id in id2event:
             return id2event[item.event_id].name or "Event"
+        
         if item.event_id in id2poi:
             return id2poi[item.event_id].name or "Place"
+        
         return "Suggestion"
 
     top = state["plan"].items[:8]
