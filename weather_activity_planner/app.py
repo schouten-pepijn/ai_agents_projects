@@ -9,7 +9,7 @@ import pandas as pd
 import pydeck as pdk
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="Weekend Planner", layout="wide")
+st.set_page_config(page_title="Event Planner", layout="wide")
 st.title("Weather + Event Planner (Open-Meteo + Geoapify)")
 
 city = st.text_input("City", "Amsterdam")
@@ -37,6 +37,7 @@ if st.button("Plan"):
         plan = pd.DataFrame(data["plan"])
         
         df = ev.merge(plan, left_on="id", right_on="event_id", how="left")
+        
         st.dataframe(
             df[["name","start","venue","suitability","reason","url"]].sort_values("suitability", ascending=False),
             use_container_width=True
@@ -45,9 +46,12 @@ if st.button("Plan"):
         df_map = df.dropna(subset=["lat","lon"])
         
         if not df_map.empty:
+            # Convert DataFrame to records for PyDeck
+            df_map_records = df_map.to_dict('records')
+            
             layer = pdk.Layer(
                 "ScatterplotLayer",
-                data=df_map,
+                data=df_map_records,
                 get_position='[lon, lat]',
                 get_radius=80,
                 get_fill_color='[255*(1-suitability), 255*suitability, 80]',
@@ -56,7 +60,7 @@ if st.button("Plan"):
             
             view = pdk.ViewState(latitude=float(df_map.iloc[0]["lat"]), longitude=float(df_map.iloc[0]["lon"]), zoom=10)
             
-            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, tooltip={"text":"{name}\nSuitability: {suitability:.2f}\n{reason}"}))
+            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view, tooltip={"text":"{name}\n{reason}"}))
     
     except requests.exceptions.HTTPError as e:
         st.error(f"API Error: {e}")
