@@ -1,9 +1,10 @@
 import os
 from typing import TypedDict, List
+import numpy as np
 from datetime import timezone
 from langgraph.graph import StateGraph, END
 
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama, OllamaEmbeddings
 from models import Query, City, WeatherSlot, Event, Plan, Place
 from tools import (
     geoapify_autocomplete_city, geoapify_forward_geocode,
@@ -32,6 +33,12 @@ def get_llm():
         max_retries=3
     )
     
+def get_embedder():
+    return OllamaEmbeddings(
+        model=config.EMBED_MODEL,
+        base_url=config.BASE_URL,
+    )
+    
 async def city_node(state: State) -> State:
     q = state["query"]
     feats = await geoapify_autocomplete_city(q.city_query) if os.getenv("GEOAPIFY_KEY") else []
@@ -55,44 +62,58 @@ async def weather_node(state: State) -> State:
 
 async def events_node(state: State) -> State:
     q = state["query"]
+    
     start_iso = q.date_from.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
     end_iso   = q.date_to.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
     lat, lon = state["city"].lat, state["city"].lon
-    
  
     preferences = q.preferences or {}
     radius_km = preferences.get("radius_km", 20)
     activity_types = preferences.get("activity_types", [])
+    additional_prefs = preferences.get("additional_preferences", "")
     
-    tm = await ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
+    tm_events = await ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
     
     if activity_types:
-        filtered_events = []
-        for e in tm:
-            # Simple keyword matching for activity types
-            event_text = f"{e.name} {e.description or ''} {e.category or ''}".lower()
-            
-            for activity in activity_types:
-                if activity.lower() in event_text or any(keyword in event_text for keyword in _get_activity_keywords(activity)):
-                    filtered_events.append(e)
-                    break
-                
-        tm = filtered_events
-                                
-    seen, merged = set(), []
+        pref_text = ", ".join(activity_types).strip().lower()
+        
+        if additional_prefs:
+            pref_text = f"{pref_text}, {additional_prefs}".strip().lower()
+        
+        embedder = get_embedder()
+        query_vec = embedder.embed_query(pref_text)
+        
+        event_texts = [
+            f"{e.name} {e.description or ''} {e.category or ''}".strip()
+            for e in tm_events
+        ]
+        doc_vecs = embedder.embed_documents(event_texts)
+        
+        ev_matrix = np.vstack(doc_vecs)
+        pref_norm = np.linalg.norm(query_vec)
+        ev_norms = np.linalg.norm(ev_matrix, axis=1)
+        
+        sims = (ev_matrix @ query_vec) / (ev_norms * pref_norm + 1e-7)
+        
+        ranked_ids = np.argsort(-sims)
+        ranked_events = [tm_events[i] for i in ranked_ids if sims[i] > 0.1]
     
-    for e in tm:
+    else:
+        ranked_events = tm_events    
+        
+    seen = set()
+    merged = []
+    for e in ranked_events:
         if not e.start:
             continue
-        
-        key=(e.name.lower(), e.start)
-        
+
+        key = (e.name.lower(), e.start.isoformat())
         if key in seen:
             continue
-        
+
         seen.add(key)
         merged.append(e)
-        
+
     state["events"] = merged
     
     return state

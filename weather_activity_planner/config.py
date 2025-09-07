@@ -15,6 +15,7 @@ class Config:
         or os.getenv("MODEL_SMALL")
     )
     BASE_URL = os.getenv("BASE_URL")  # Ollama base URL
+    EMBED_MODEL = os.getenv("EMBED_MODEL") or "nomic-embed-text"
 
 
 @dataclass(frozen=True)
