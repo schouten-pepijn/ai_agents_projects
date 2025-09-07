@@ -52,4 +52,4 @@ class Query(BaseModel):
     city_query: str
     date_from: datetime
     date_to: datetime
-    preference: Optional[dict] = None
+    preferences: Optional[dict] = None
