@@ -156,21 +156,42 @@ if plan_button:
         
         with tab2:
             if not events_df.empty:
-                st.subheader("All Available Events")
+                st.subheader("🎪 All Available Events")
+                
+                # Add source filter if the column exists
+                if "source" in events_df.columns:
+                    sources = events_df["source"].unique().tolist()
+                    selected_sources = st.multiselect(
+                        "Filter by event source",
+                        sources,
+                        default=sources,
+                        help="Select which event sources to display"
+                    )
+                    
+                    filtered_events_df = events_df[events_df["source"].isin(selected_sources)] if selected_sources else events_df
+                else:
+                    filtered_events_df = events_df
+                
+                # Display events with source information
+                display_columns = ["name", "source", "start", "end", "venue", "category", "description", "url"]
+                available_columns = [col for col in display_columns if col in filtered_events_df.columns]
+                
                 st.dataframe(
-                    events_df[["name", "start", "end", "venue", "category", "description", "url"]],
-                    width="stretch",
+                    filtered_events_df[available_columns],
+                    use_container_width=True,
                     column_config={
                         "name": "Event Name",
+                        "source": st.column_config.TextColumn("Source", help="Event data source (ticketmaster, google_events, etc.)"),
                         "start": st.column_config.DatetimeColumn("Start"),
                         "end": st.column_config.DatetimeColumn("End"),
                         "venue": "Venue",
-                        "category": "Category",
+                        "category": "Category", 
                         "description": "Description",
                         "url": st.column_config.LinkColumn("Event Link")
                     }
                 )
-                st.caption(f"Total events found: {len(events_df)}")
+                
+                st.caption(f"Showing {len(filtered_events_df)} of {len(events_df)} total events found.")
             else:
                 st.info("No events found for your search criteria.")
         
@@ -324,3 +345,7 @@ if plan_button:
             st.code(str(e))
         
         st.info("**What you can try:**\n- Refresh the page and try again\n- Simplify your search criteria\n- Check the API server logs for more details")
+    
+    # Debug expander to view raw API response
+    with st.expander("🕵️‍♂️ Debug: View Raw API Response"):
+        st.json(data)

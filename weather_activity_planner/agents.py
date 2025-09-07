@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import TypedDict, List
 import numpy as np
@@ -9,7 +10,8 @@ from models import Query, City, WeatherSlot, Event, Plan, Place
 from tools import (
     geoapify_autocomplete_city, geoapify_forward_geocode,
     open_meteo_forecast, ticketmaster_events,
-    geoapify_places, parse_geoapify_place
+    geoapify_places, _parse_geoapify_place,
+    serpapi_google_events
 )
 from planner import build_plan, append_pois_when_sparse
 from config import config, constants
@@ -72,8 +74,30 @@ async def events_node(state: State) -> State:
     activity_types = preferences.get("activity_types", [])
     additional_prefs = preferences.get("additional_preferences", "")
     
-    tm_events = await ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
+    tm_events_task = ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
+    serp_events_task = serpapi_google_events(state["city"], start_iso, end_iso, query="events")
+
+    # Use return_exceptions=True to prevent one failure from breaking everything
+    tm_events, g_events = await asyncio.gather(tm_events_task, serp_events_task, return_exceptions=True)
     
+    all_events = []
+    
+    # Handle Ticketmaster events
+    if isinstance(tm_events, Exception):
+        tm_events = []
+    else:
+        pass
+        
+    # Handle SerpAPI events  
+    if isinstance(g_events, Exception):
+        g_events = []
+    else:
+        pass
+    
+    all_events.extend(tm_events or [])
+    all_events.extend(g_events or [])
+
+    ranked_events = all_events
     # Rank events by similarity to user preferences if provided
     if activity_types:
         pref_text = ", ".join(activity_types).strip().lower()
@@ -81,45 +105,29 @@ async def events_node(state: State) -> State:
         if additional_prefs:
             pref_text = f"{pref_text}, {additional_prefs}".strip().lower()
         
-        embedder = get_embedder()
-        query_vec = embedder.embed_query(pref_text)
-        
-        event_texts = [
-            f"{e.name} {e.description or ''} {e.category or ''}".strip()
-            for e in tm_events
-        ]
-        doc_vecs = embedder.embed_documents(event_texts)
-        
-        # calculate cosine similarities
-        ev_matrix = np.vstack(doc_vecs)
-        pref_norm = np.linalg.norm(query_vec)
-        ev_norms = np.linalg.norm(ev_matrix, axis=1)
-        
-        sims = (ev_matrix @ query_vec) / (ev_norms * pref_norm + 1e-7)
-        
-        ranked_ids = np.argsort(-sims)
-        ranked_events = [tm_events[i] for i in ranked_ids if sims[i] > 0.1]
-        
-        
-    
-    else:
-        ranked_events = tm_events    
-        
-    # Deduplicate events by (name, start time)
-    seen = set()
-    merged = []
-    for e in ranked_events:
-        if not e.start:
-            continue
+        if pref_text:
+            embedder = get_embedder()
+            query_vec = embedder.embed_query(pref_text)
+            
+            event_texts = [
+                f"{e.name} {e.description or ''} {e.category or ''}".strip()
+                for e in all_events
+            ]
+            doc_vecs = embedder.embed_documents(event_texts)
+            
+            # calculate cosine similarities
+            if doc_vecs:
+                ev_matrix = np.vstack(doc_vecs)
+                pref_norm = np.linalg.norm(query_vec)
+                ev_norms = np.linalg.norm(ev_matrix, axis=1)
+                
+                sims = (ev_matrix @ query_vec) / (ev_norms * pref_norm + 1e-7)
+                
+                # Sort by similarity but don't filter out everything if scores are low/negative
+                ranked_ids = np.argsort(-sims)
+                ranked_events = [all_events[i] for i in ranked_ids]
 
-        key = (e.name.lower(), e.start.isoformat())
-        if key in seen:
-            continue
-
-        seen.add(key)
-        merged.append(e)
-
-    state["events"] = merged
+    state["events"] = ranked_events
     
     return state
 
@@ -156,7 +164,7 @@ async def places_node(state: State) -> State:
         categories_str = constants.GEOAPIFY_CATEGORIES
 
     feats = await geoapify_places(c.lat, c.lon, categories_str, radius_km=radius_km)
-    state["places"] = [parse_geoapify_place(f) for f in feats]
+    state["places"] = [_parse_geoapify_place(f) for f in feats]
     return state
 
 
