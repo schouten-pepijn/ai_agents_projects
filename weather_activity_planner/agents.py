@@ -1,5 +1,6 @@
 import asyncio
 import os
+import json
 from typing import TypedDict, List
 import numpy as np
 from datetime import timezone
@@ -8,13 +9,17 @@ from langgraph.graph import StateGraph, END
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 from models import Query, City, WeatherSlot, Event, Plan, Place
 from tools import (
-    geoapify_autocomplete_city, geoapify_forward_geocode,
-    open_meteo_forecast, ticketmaster_events,
-    geoapify_places, _parse_geoapify_place,
+    geoapify_autocomplete_city,
+    geoapify_forward_geocode,
+    open_meteo_forecast,
+    ticketmaster_events,
+    geoapify_places,
+    _parse_geoapify_place,
     serpapi_google_events
 )
 from planner import build_plan, append_pois_when_sparse
 from config import config, constants
+from helpers import safe_parse_json, chunks
 
 
 class State(TypedDict):
@@ -40,6 +45,80 @@ def get_embedder():
         model=config.EMBED_MODEL,
         base_url=config.BASE_URL,
     )
+    
+async def classify_indoor_node(state: State) -> State:
+    if not state.get("events"):
+        return state
+
+    llm = get_llm()
+    events = state["events"]
+
+    # Only classify events that don't already have indoor set
+    to_classify = [e for e in events if e.indoor is None]
+    if not to_classify:
+        return state
+
+    # Batch to reduce calls
+    BATCH = 10
+    SEM = asyncio.Semaphore(3)  # modest concurrency
+
+    async def _classify_batch(batch):
+        # Prepare compact records for the prompt
+        recs = [
+            {
+                "id": e.id,
+                "name": e.name or "",
+                "venue": e.venue or "",
+                "category": e.category or "",
+                "desc": (e.description or "")[:800],  # trim long text
+            }
+            for e in batch
+        ]
+
+        prompt = (
+            "You are a careful classifier.\n"
+            "Task: For each event, decide if it is primarily INDOOR or OUTDOOR.\n"
+            "Rules:\n"
+            "- INDOOR examples: museum, theater, cinema, club, gallery, conference, expo, arena (if roofed).\n"
+            "- OUTDOOR examples: park, festival, open-air concert, beach, marathon, street market, stadium (open).\n"
+            "- If ambiguous, choose the most likely based on description and venue.\n"
+            "- Respond ONLY as compact JSON array. Each item: {\"id\": str, \"indoor\": true|false}.\n\n"
+            f"Events:\n{json.dumps(recs, ensure_ascii=False)}\n\n"
+            "Return JSON now."
+        )
+
+        # guard concurrency
+        async with SEM:
+            out = await llm.ainvoke(prompt)
+
+        js = safe_parse_json(out.content)
+        if not isinstance(js, list):
+            return {}
+
+        m = {}
+        for row in js:
+            try:
+                ev_id = str(row["id"])
+                ind = bool(row["indoor"])
+                m[ev_id] = ind
+            except Exception:
+                continue
+        return m
+
+    # Run batches
+    results = {}
+    for batch in chunks(to_classify, BATCH):
+        m = await _classify_batch(batch)
+        results.update(m)
+
+    # Write back classifications
+    id2ind = results
+    for e in events:
+        if e.indoor is None and e.id in id2ind:
+            e.indoor = id2ind[e.id]
+
+    state["events"] = events
+    return state
     
 async def city_node(state: State) -> State:
     q = state["query"]
@@ -132,20 +211,6 @@ async def events_node(state: State) -> State:
     return state
 
 
-def _get_activity_keywords(activity_type: str) -> list:
-    keywords_map = {
-        "outdoor": ["park", "festival", "outdoor", "beach", "garden", "hiking", "cycling"],
-        "indoor": ["theater", "cinema", "museum", "gallery", "club", "hall"],
-        "cultural": ["museum", "art", "theater", "opera", "cultural", "heritage", "history"],
-        "sports": ["stadium", "sports", "football", "basketball", "tennis", "athletic"],
-        "music": ["concert", "music", "band", "singer", "orchestra", "festival"],
-        "food & drink": ["restaurant", "food", "wine", "beer", "dining", "culinary"],
-        "family": ["family", "children", "kids", "playground", "zoo", "aquarium"],
-        "nightlife": ["bar", "club", "nightlife", "party", "dance", "pub"]
-    }
-    return keywords_map.get(activity_type.lower(), [])
-
-
 async def places_node(state: State) -> State:
     c = state["city"]
     q = state["query"]
@@ -170,7 +235,7 @@ async def places_node(state: State) -> State:
 
 async def plan_node(state: State) -> State:
     
-    state["plan"] = build_plan(state["city"], state["events"], state["weather"])
+    state["plan"] = await build_plan(state["city"], state["events"], state["weather"])
     append_pois_when_sparse(state["plan"], state["places"], state["weather"], k=6)
     
     return state
@@ -210,7 +275,7 @@ async def narrative_node(state: State) -> State:
         
     preference_context = " ".join(prefs_chunks)
 
-    prompt = f"""Write a concise activity plan for {state['city'].query}. 6-8 items. One sentence each.
+    prompt = f"""Write a concise activity plan for {state['city'].query}. 8-10 items. One sentence each.
 
 {preference_context}
 
@@ -229,6 +294,7 @@ def build_graph():
     g.add_node("city", city_node)
     g.add_node("weather", weather_node)
     g.add_node("events", events_node)
+    g.add_node("classify_indoor", classify_indoor_node)
     g.add_node("places", places_node)
     g.add_node("plan", plan_node)
     g.add_node("narrative", narrative_node)
@@ -236,7 +302,8 @@ def build_graph():
     g.set_entry_point("city")
     g.add_edge("city","weather")
     g.add_edge("weather","events")
-    g.add_edge("events","places")
+    g.add_edge("events","classify_indoor")
+    g.add_edge("classify_indoor","places")
     g.add_edge("places","plan")
     g.add_edge("plan","narrative")
     g.add_edge("narrative", END)

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
+import json
 import re
 from models import City
 
@@ -56,3 +57,16 @@ def clean_city_label(city: City) -> str:
     label = re.sub(r"\s{2,}", " ", label)
     
     return label or "Amsterdam"
+
+
+def chunks(lst: List, size: int):
+    """Split a list into chunks of given size."""
+    for i in range(0, len(lst), size):
+        yield lst[i:i + size]
+
+def safe_parse_json(content: str):
+    """Safely parse JSON content with fallback."""
+    try:
+        return json.loads(content)
+    except Exception:
+        return None

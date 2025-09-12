@@ -13,7 +13,6 @@ st.set_page_config(page_title="Event Planner", layout="wide", page_icon="🌤️
 
 st.title("🌤️ Weather + Event Planner")
 st.markdown("*Powered by Open-Meteo, Geoapify & Ticketmaster APIs*")
-
 st.markdown("""
 **Plan your perfect activities based on weather conditions and local events!**
 
@@ -101,10 +100,20 @@ if plan_button:
     # Convert selected category names to API category strings
     selected_category_codes = [PLACE_CATEGORIES[cat] for cat in place_categories]
     
-    payload={
+    # Fix datetime formatting - ensure timezone aware datetime
+    date_from_dt = datetime.combine(date_from, datetime.min.time())
+    date_to_dt = datetime.combine(date_to, datetime.max.time())
+    
+    # Make timezone aware if not already
+    if date_from_dt.tzinfo is None:
+        date_from_dt = date_from_dt.replace(tzinfo=timezone.utc)
+    if date_to_dt.tzinfo is None:
+        date_to_dt = date_to_dt.replace(tzinfo=timezone.utc)
+    
+    payload = {
         "city_query": city,
-        "date_from": datetime.combine(date_from, datetime.min.time()).isoformat(),
-        "date_to": datetime.combine(date_to,   datetime.max.time()).isoformat(),
+        "date_from": date_from_dt.isoformat(),
+        "date_to": date_to_dt.isoformat(),
         "preferences": {
             "radius_km": radius,
             "activity_types": activity_types,
@@ -115,7 +124,32 @@ if plan_button:
     
     try:
         with st.spinner("Planning your activities..."):
-            r = requests.post("http://localhost:8000/plan", json=payload, timeout=60)
+            # Debug: Show the payload being sent
+            with st.expander("🔍 Debug: Request Payload", expanded=False):
+                st.json(payload)
+            
+            r = requests.post("http://127.0.0.1:8000/plan", json=payload, timeout=300)
+            
+            # If we get a 422 error, show the detailed validation error
+            if r.status_code == 422:
+                st.error("**Validation Error (422)**")
+                st.write("The request data doesn't match the expected format.")
+                
+                try:
+                    error_detail = r.json()
+                    st.json(error_detail)
+                    # Show helpful error breakdown
+                    if "detail" in error_detail:
+                        st.subheader("Validation Issues:")
+                        for error in error_detail["detail"]:
+                            location = " → ".join(str(loc) for loc in error.get("loc", []))
+                            st.error(f"**{location}**: {error.get('msg', 'Unknown error')}")
+                            if "input" in error:
+                                st.code(f"Received: {error['input']}")
+                except Exception:
+                    st.code(r.text)
+                st.stop()
+            
             r.raise_for_status()
             data = r.json()
 
@@ -178,7 +212,7 @@ if plan_button:
                 
                 st.dataframe(
                     filtered_events_df[available_columns],
-                    use_container_width=True,
+                    width="stretch",
                     column_config={
                         "name": "Event Name",
                         "source": st.column_config.TextColumn("Source", help="Event data source (ticketmaster, google_events, etc.)"),

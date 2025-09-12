@@ -1,29 +1,7 @@
 from models import Event, Place, WeatherSlot, Plan, PlanItem, City
-from config import constants
 from typing import List
 from datetime import datetime, timezone
 
-
-def infer_indoor(event: Event):
-    text = " ".join(
-        filter(
-            None,
-            [
-                event.name,
-                event.description or "",
-                event.venue or "",
-                event.category or "",
-            ]
-        )
-    ).lower()
-    
-    if any(w in text for w in constants.OUTDOOR_HITS):
-        return False
-    
-    if any(w in text for w in constants.INDOOR_HINTS):
-        return True
-
-    return True
 
 def nearest_weather(slot_df: datetime, wx: List[WeatherSlot]) -> WeatherSlot:
     if slot_df.tzinfo is None:
@@ -57,17 +35,105 @@ def indoor_suitability(w: WeatherSlot) -> float:
     return max(
         0.0,
         min(1.0, 0.4 * comfort + 0.6 * bad_weather))
+
+# AI-driven suitability functions with fallback to original formulas
+async def ai_outdoor_suitability(w: WeatherSlot) -> float:
+    """AI-driven outdoor suitability assessment with fallback to formula-based calculation."""
+    try:
+        from agents import get_llm
+        llm = get_llm()
+        
+        prompt = (
+            f"Rate outdoor activity suitability (0.0-1.0) for these conditions:\n"
+            f"• Temperature: {w.temp}°C\n"
+            f"• Precipitation: {w.precip_mm}mm\n" 
+            f"• Wind speed: {w.wind_ms} m/s\n"
+            f"• Cloud coverage: {w.cloud_pct}%\n"
+            f"• Precipitation probability: {w.pop:.1%}\n\n"
+            f"Consider factors like:\n"
+            f"- Comfort for walking/outdoor activities\n"
+            f"- Safety (wind, rain)\n"
+            f"- General pleasantness\n\n"
+            f"Return ONLY a decimal number between 0.0 and 1.0."
+        )
+        
+        result = await llm.ainvoke(prompt)
+        score_str = result.content.strip()
+        
+        # Extract numeric value from response
+        try:
+            score = float(score_str)
+            # Clamp to valid range
+            return max(0.0, min(1.0, score))
+        except ValueError:
+            # Try to extract first number from response
+            import re
+            numbers = re.findall(r'0?\.\d+|[01]\.?\d*', score_str)
+            if numbers:
+                score = float(numbers[0])
+                return max(0.0, min(1.0, score))
+            else:
+                raise ValueError("No valid score found")
+                
+    except Exception:
+        # Fallback to original formula
+        return outdoor_suitability(w)
+
+async def ai_indoor_suitability(w: WeatherSlot) -> float:
+    """AI-driven indoor suitability assessment with fallback to formula-based calculation."""
+    try:
+        from agents import get_llm
+        llm = get_llm()
+        
+        prompt = (
+            f"Rate indoor activity suitability (0.0-1.0) for these conditions:\n"
+            f"• Temperature: {w.temp}°C\n"
+            f"• Precipitation: {w.precip_mm}mm\n"
+            f"• Wind speed: {w.wind_ms} m/s\n" 
+            f"• Cloud coverage: {w.cloud_pct}%\n"
+            f"• Precipitation probability: {w.pop:.1%}\n\n"
+            f"Consider factors like:\n"
+            f"- Bad weather makes indoor activities more appealing\n"
+            f"- Moderate temperatures are comfortable for any activity\n"
+            f"- Indoor activities are weather-independent but benefit from contrast\n\n"
+            f"Return ONLY a decimal number between 0.0 and 1.0."
+        )
+        
+        result = await llm.ainvoke(prompt)
+        score_str = result.content.strip()
+        
+        # Extract numeric value from response
+        try:
+            score = float(score_str)
+            # Clamp to valid range
+            return max(0.0, min(1.0, score))
+        except ValueError:
+            # Try to extract first number from response
+            import re
+            numbers = re.findall(r'0?\.\d+|[01]\.?\d*', score_str)
+            if numbers:
+                score = float(numbers[0])
+                return max(0.0, min(1.0, score))
+            else:
+                raise ValueError("No valid score found")
+                
+    except Exception:
+        # Fallback to original formula
+        return indoor_suitability(w)
     
-def build_plan(city: City, events: List[Event], wx: List[WeatherSlot]) -> Plan:
+async def build_plan(city: City, events: List[Event], wx: List[WeatherSlot]) -> Plan:
     items = []
     
     for e in events:
         if not e.start:
             continue
        
-        ind = e.indoor if e.indoor is not None else infer_indoor(e)
+        # Use the indoor classification from the AI node, default to indoor if not set
+        ind = e.indoor if e.indoor is not None else True
         w = nearest_weather(e.start.astimezone(timezone.utc), wx)
-        s = indoor_suitability(w) if ind else outdoor_suitability(w)
+        
+        # Use AI-driven suitability assessment
+        s = await (ai_indoor_suitability(w) if ind else ai_outdoor_suitability(w))
 
         reason = f"{'Indoor' if ind else 'Outdoor'} · clouds {w.cloud_pct}%, {round(w.temp)}°C, precip {w.precip_mm:.1f}mm"
 
