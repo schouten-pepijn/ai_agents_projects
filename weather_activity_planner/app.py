@@ -129,27 +129,6 @@ if plan_button:
                 st.json(payload)
             
             r = requests.post("http://127.0.0.1:8000/plan", json=payload, timeout=300)
-            
-            # If we get a 422 error, show the detailed validation error
-            if r.status_code == 422:
-                st.error("**Validation Error (422)**")
-                st.write("The request data doesn't match the expected format.")
-                
-                try:
-                    error_detail = r.json()
-                    st.json(error_detail)
-                    # Show helpful error breakdown
-                    if "detail" in error_detail:
-                        st.subheader("Validation Issues:")
-                        for error in error_detail["detail"]:
-                            location = " → ".join(str(loc) for loc in error.get("loc", []))
-                            st.error(f"**{location}**: {error.get('msg', 'Unknown error')}")
-                            if "input" in error:
-                                st.code(f"Received: {error['input']}")
-                except Exception:
-                    st.code(r.text)
-                st.stop()
-            
             r.raise_for_status()
             data = r.json()
 
