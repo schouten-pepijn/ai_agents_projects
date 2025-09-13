@@ -1,5 +1,3 @@
-import os
-import pandas as pd
 from .schema import State
 from src.tools.finance_yf import get_daily
 from src.core.features import technical_indicators
@@ -9,7 +7,7 @@ from src.core.report import summarize
 
 
 # currently only supports Yahoo Finance
-def route_question(state: State) -> str:
+def route_question(state: State) -> State:
     q = (state.get("question") or "").lower()
 
     state["symbol"] = state.get("symbol") or (
@@ -19,7 +17,7 @@ def route_question(state: State) -> str:
     )
     state["provider"] = "yf"
 
-    return "fetch"
+    return state
 
 
 def fetch(state: State) -> State:
@@ -51,7 +49,8 @@ def forecast(state: State) -> State:
 
 
 def backtest(state: State) -> State:
-    px = state["features"].join(state["data"][["adj_close"]], how="left")
+    # Avoid column overlap by using features (which already contains adj_close)
+    px = state["features"]
 
     r_rule = run_backtest(px, state["signals"]["rule"])
     r_ml = run_backtest(px, state["signals"]["ml"])

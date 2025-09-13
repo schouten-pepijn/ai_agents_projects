@@ -13,14 +13,24 @@ def ml_signal(feature: pd.DataFrame) -> pd.Series:
     y = feature["ret_1d"].shift(-1)
     X, y = X.iloc[:-1], y.iloc[:-1]
 
-    if len(X) < 60:
+    # Handle NaN values by dropping rows with any missing values
+    valid_mask = ~(X.isna().any(axis=1) | y.isna())
+    X_clean = X[valid_mask]
+    y_clean = y[valid_mask]
+
+    if len(X_clean) < 60:
         return pd.Series(0, index=feature.index, dtype=int)
 
-    split = int(len(X) * 0.7)
-    model = Ridge(alpha=1.0).fit(X.iloc[:split], y.iloc[:split])
+    split = int(len(X_clean) * 0.7)
+    model = Ridge(alpha=1.0).fit(X_clean.iloc[:split], y_clean.iloc[:split])
 
-    preds = model.predict(X.iloc[split:], index=X.index[split:])
+    # Make predictions on the clean data
+    preds = model.predict(X_clean.iloc[split:])
 
-    signal = (preds > 0).astype(int)
+    # Create a series with predictions aligned to the original index
+    pred_series = pd.Series(0, index=feature.index, dtype=float)
+    pred_series.loc[X_clean.index[split:]] = preds
 
-    return signal.reindex(feature.index, method="ffill").fillna(0).astype(int)
+    signal = (pred_series > 0).astype(int)
+
+    return signal
