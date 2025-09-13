@@ -1,0 +1,61 @@
+import os
+import pandas as pd
+from .schema import State
+from src.tools.finance_yf import get_daily
+from src.core.features import technical_indicators
+from src.core.models import rule_signal, ml_signal
+from src.core.backtest import run_backtest
+from src.core.report import summarize
+
+
+# currently only supports Yahoo Finance
+def route_question(state: State) -> str:
+    q = (state.get("question") or "").lower()
+
+    state["symbol"] = state.get("symbol") or (
+        "AAPL"
+        if "apple" in q
+        else "MSFT" if "microsoft" in q else "NVDA" if "nvidia" in q else "AAPL"
+    )
+    state["provider"] = "yf"
+
+    return "fetch"
+
+
+def fetch(state: State) -> State:
+    symbol = state["symbol"]
+
+    try:
+        df = get_daily(symbol)
+
+    except Exception as e:
+        raise ValueError(f"Error fetching data for {symbol}: {e}") from e
+
+    state["data"] = df
+
+    return state
+
+
+def featurize(state: State) -> State:
+    state["features"] = technical_indicators(state["data"])
+
+    return state
+
+
+def forecast(state: State) -> State:
+    features = state["features"]
+
+    state["signals"] = {"rule": rule_signal(features), "ml": ml_signal(features)}
+
+    return state
+
+
+def backtest(state: State) -> State:
+    px = state["features"].join(state["data"][["adj_close"]], how="left")
+
+    r_rule = run_backtest(px, state["signals"]["rule"])
+    r_ml = run_backtest(px, state["signals"]["ml"])
+
+    state["results"] = summarize(state["symbol"], r_rule, r_ml)
+
+    return state
