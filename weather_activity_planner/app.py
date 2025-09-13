@@ -17,7 +17,7 @@ st.markdown("""
 **Plan your perfect activities based on weather conditions and local events!**
 
 This tool helps you discover:
-- 🎪 **Events & Shows** from Ticketmaster
+- 🎪 **Events & Shows** from Ticketmaster & Google Events
 - 📍 **Local Places** from Geoapify (restaurants, museums, parks, etc.)
 - 🌤️ **Weather-aware recommendations** using AI planning
 
@@ -382,4 +382,7 @@ if plan_button:
     
     # Debug expander to view raw API response
     with st.expander("🕵️‍♂️ Debug: View Raw API Response"):
-        st.json(data)
+        if 'data' in locals() and data:  # Check if 'data' exists and is not None
+            st.json(data)
+        else:
+            st.info("No data available to display.")
