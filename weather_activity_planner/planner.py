@@ -1,3 +1,4 @@
+import re
 from models import Event, Place, WeatherSlot, Plan, PlanItem, City
 from typing import List
 from datetime import datetime, timezone
@@ -107,13 +108,14 @@ async def ai_indoor_suitability(w: WeatherSlot) -> float:
             score = float(score_str)
             # Clamp to valid range
             return max(0.0, min(1.0, score))
+        
         except ValueError:
             # Try to extract first number from response
-            import re
             numbers = re.findall(r'0?\.\d+|[01]\.?\d*', score_str)
             if numbers:
                 score = float(numbers[0])
                 return max(0.0, min(1.0, score))
+            
             else:
                 raise ValueError("No valid score found")
                 

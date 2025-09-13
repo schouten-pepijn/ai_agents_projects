@@ -198,7 +198,7 @@ async def _do_serpapi_request(params: dict) -> dict:
         return r.json()
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.6))
-async def serpapi_google_events(city: City, start_iso: str, end_iso: str, query: str = "events", max_results: int = 20) -> List[Event]:
+async def serpapi_google_events(city: City, start_iso: str, end_iso: str, query: str = "events", max_results: int = 10) -> List[Event]:
     # Skip SerpAPI if disabled or no key is configured
     if not getattr(config, 'SERPAPI_ENABLED', True) or not config.SERPAPI_KEY:
         return []
@@ -329,7 +329,7 @@ def _parse_ticketmaster_event(e)->Event:
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5))
-async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, radius_km: int = 10, max_pages: int = 5) -> List[Event]:
+async def ticketmaster_events(lat: float, lon: float, start_iso: str, end_iso: str, radius_km: int = 10, max_pages: int = 2) -> List[Event]:
     # Skip Ticketmaster API if disabled or no API key
     if not getattr(config, 'TICKETMASTER_ENABLED', True) or not config.TMK:
         return []

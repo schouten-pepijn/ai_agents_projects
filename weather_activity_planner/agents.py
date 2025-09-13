@@ -60,7 +60,7 @@ async def classify_indoor_node(state: State) -> State:
 
     # Batch to reduce calls
     BATCH = 10
-    SEM = asyncio.Semaphore(3)  # modest concurrency
+    SEM = asyncio.Semaphore(6)
 
     async def _classify_batch(batch):
         # Prepare compact records for the prompt
@@ -156,7 +156,6 @@ async def events_node(state: State) -> State:
     tm_events_task = ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
     serp_events_task = serpapi_google_events(state["city"], start_iso, end_iso, query="events")
 
-    # Use return_exceptions=True to prevent one failure from breaking everything
     tm_events, g_events = await asyncio.gather(tm_events_task, serp_events_task, return_exceptions=True)
     
     all_events = []
@@ -164,14 +163,10 @@ async def events_node(state: State) -> State:
     # Handle Ticketmaster events
     if isinstance(tm_events, Exception):
         tm_events = []
-    else:
-        pass
         
     # Handle SerpAPI events  
     if isinstance(g_events, Exception):
         g_events = []
-    else:
-        pass
     
     all_events.extend(tm_events or [])
     all_events.extend(g_events or [])
@@ -202,7 +197,7 @@ async def events_node(state: State) -> State:
                 
                 sims = (ev_matrix @ query_vec) / (ev_norms * pref_norm + 1e-7)
                 
-                # Sort by similarity but don't filter out everything if scores are low/negative
+                # Sort by similarity but don't filter out everything
                 ranked_ids = np.argsort(-sims)
                 ranked_events = [all_events[i] for i in ranked_ids]
 
@@ -229,7 +224,9 @@ async def places_node(state: State) -> State:
         categories_str = constants.GEOAPIFY_CATEGORIES
 
     feats = await geoapify_places(c.lat, c.lon, categories_str, radius_km=radius_km)
+    
     state["places"] = [_parse_geoapify_place(f) for f in feats]
+    
     return state
 
 
@@ -291,6 +288,7 @@ Create a narrative that considers the user's preferences and explains why these 
 
 def build_graph():
     g = StateGraph(State)
+    
     g.add_node("city", city_node)
     g.add_node("weather", weather_node)
     g.add_node("events", events_node)
@@ -307,4 +305,5 @@ def build_graph():
     g.add_edge("places","plan")
     g.add_edge("plan","narrative")
     g.add_edge("narrative", END)
+    
     return g.compile()

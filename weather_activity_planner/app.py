@@ -1,13 +1,22 @@
 """
-    uvicorn api:app --reload --port 8000
     streamlit run app.py
 """
 
 import streamlit as st
-import requests
 import pandas as pd
 import pydeck as pdk
 from datetime import datetime, timedelta, timezone
+import asyncio
+
+from models import Query
+from agents import build_graph
+
+# Cache the compiled graph so it's built only once per Streamlit session
+@st.cache_resource(show_spinner=False)
+def get_graph():
+    return build_graph()
+
+graph = get_graph()
 
 st.set_page_config(page_title="Event Planner", layout="wide", page_icon="🌤️")
 
@@ -99,48 +108,51 @@ with col_info:
 if plan_button:
     # Convert selected category names to API category strings
     selected_category_codes = [PLACE_CATEGORIES[cat] for cat in place_categories]
-    
-    # Fix datetime formatting - ensure timezone aware datetime
-    date_from_dt = datetime.combine(date_from, datetime.min.time())
-    date_to_dt = datetime.combine(date_to, datetime.max.time())
-    
-    # Make timezone aware if not already
-    if date_from_dt.tzinfo is None:
-        date_from_dt = date_from_dt.replace(tzinfo=timezone.utc)
-    if date_to_dt.tzinfo is None:
-        date_to_dt = date_to_dt.replace(tzinfo=timezone.utc)
-    
-    payload = {
-        "city_query": city,
-        "date_from": date_from_dt.isoformat(),
-        "date_to": date_to_dt.isoformat(),
-        "preferences": {
+
+    # Ensure timezone-aware datetimes
+    date_from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+    date_to_dt = datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
+
+    # Build Query object
+    query = Query(
+        city_query=city,
+        date_from=date_from_dt,
+        date_to=date_to_dt,
+        preferences={
             "radius_km": radius,
             "activity_types": activity_types,
             "place_categories": selected_category_codes,
-            "additional_preferences": preferences_text.strip() if preferences_text.strip() else None
-        }
-    }
-    
+            "additional_preferences": preferences_text.strip() if preferences_text.strip() else None,
+        },
+    )
+
     try:
         with st.spinner("Planning your activities..."):
-            # Debug: Show the payload being sent
-            with st.expander("🔍 Debug: Request Payload", expanded=False):
-                st.json(payload)
-            
-            r = requests.post("http://127.0.0.1:8000/plan", json=payload, timeout=300)
-            r.raise_for_status()
-            data = r.json()
+            # Debug: Show the query being used
+            with st.expander("🔍 Debug: Query Input", expanded=False):
+                st.json(query.model_dump())
 
-        st.subheader(data["city"].get("label") or data["city"]["query"])
-        st.write(data["narrative"])
+            # Run the graph asynchronously
+            result = asyncio.run(graph.ainvoke({"query": query}))
+
+            # Transform result
+            data = {
+                "city": result["city"].model_dump(),
+                "events": [e.model_dump() for e in result.get("events", [])],
+                "places": [p.model_dump() for p in result.get("places", [])],
+                "plan": [i.model_dump() for i in result.get("plan", []).items],
+                "narrative": result.get("narrative", ""),
+            }
+
+        st.subheader(data["city"].get("label") or data["city"].get("query", "Unknown City"))
+        st.write(data.get("narrative", ""))
 
         # Process events and plan data
         events_df = pd.DataFrame(data["events"])
         plan_df = pd.DataFrame(data["plan"])
         places_df = pd.DataFrame(data.get("places", []))
         
-        # Create tabs for better organization
+        # Create tabs
         tab1, tab2, tab3, tab4 = st.tabs(["📋 Activity Plan", "🎪 All Events", "📍 All Places", "🗺️ Map View"])
         
         with tab1:
@@ -325,43 +337,16 @@ if plan_button:
             else:
                 st.info("No map data available. Make sure events or places have location coordinates.")
     
-    except requests.exceptions.HTTPError as e:
-        st.error("**API Error Occurred**")
-        st.write(f"**Status Code**: {e.response.status_code if hasattr(e, 'response') else 'Unknown'}")
-        
-        if hasattr(e, 'response') and e.response:
-            try:
-                error_detail = e.response.json()
-                st.json(error_detail)
-            except Exception:
-                with st.expander("View Raw Response"):
-                    st.code(e.response.text)
-        
-        st.info("**Troubleshooting Tips:**\n- Check if your search location is valid\n- Try a different date range\n- Verify API keys are properly configured")
-                
-    except requests.exceptions.RequestException as e:
-        st.error("**Connection Error**")
-        st.write("Unable to connect to the planning service.")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.info("**Check if the API server is running:**\n- Server should be on `http://localhost:8000`\n- Try restarting the API service")
-        with col2:
-            if st.button("Retry Connection"):
-                st.rerun()
-                
     except Exception as e:
-        st.error("**Unexpected Error**")
-        st.write("Something unexpected happened during planning.")
-        
+        st.error("**Planning Error**")
+        st.write("Something went wrong while generating your plan.")
         with st.expander("View Error Details"):
-            st.code(str(e))
-        
-        st.info("**What you can try:**\n- Refresh the page and try again\n- Simplify your search criteria\n- Check the API server logs for more details")
-    
-    # Debug expander to view raw API response
-    with st.expander("🕵️‍♂️ Debug: View Raw API Response"):
-        if 'data' in locals() and data:  # Check if 'data' exists and is not None
+            st.exception(e)
+        st.info("Try adjusting your inputs or verifying external API keys (Geoapify, Ticketmaster, SerpAPI).")
+
+    # Debug expander to view raw result
+    with st.expander("🕵️‍♂️ Debug: Raw Planner Output"):
+        if 'data' in locals() and data:
             st.json(data)
         else:
             st.info("No data available to display.")
