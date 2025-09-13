@@ -16,7 +16,7 @@ def get_daily(symbol: str, period="max", interval="1d") -> pd.DataFrame:
             "Open": "open",
             "High": "high",
             "Low": "low",
-            "Close": "close",
+            "Close": "adj_close",
             "Volume": "volume",
         }
     )
@@ -26,7 +26,7 @@ def get_daily(symbol: str, period="max", interval="1d") -> pd.DataFrame:
             "open",
             "high",
             "low",
-            "close",
+            "adj_close",
             "volume",
         ]
     ].sort_index()
