@@ -1,6 +1,7 @@
 import json
+import logging
 
-from typing import List, TypedDict, Literal, Annotated
+from typing import List, TypedDict, Annotated
 from operator import add
 
 from langgraph.graph import StateGraph, START, END
@@ -49,36 +50,36 @@ def node_sentiment(state: State) -> State:
 
 
 def node_ta(state: State) -> State:
-    print("\n=== NODE_TA DEBUG ===")
-    print(f"Fetching data for symbol: {state['symbol']}")
+    logging.debug("\n=== NODE_TA DEBUG ===")
+    logging.debug(f"Fetching data for symbol: {state['symbol']}")
 
     df = fetch_bars(state["symbol"], settings.yf_period, settings.yf_interval)
-    print(f"DataFrame shape: {df.shape}")
-    print(f"DataFrame columns: {df.columns.tolist()}")
+    logging.debug(f"DataFrame shape: {df.shape}")
+    logging.debug(f"DataFrame columns: {df.columns.tolist()}")
 
     df = compute_ta(df)
-    print(f"DataFrame shape after TA: {df.shape}")
-    print(f"DataFrame columns after TA: {df.columns.tolist()}")
+    logging.debug(f"DataFrame shape after TA: {df.shape}")
+    logging.debug(f"DataFrame columns after TA: {df.columns.tolist()}")
 
     last = df.iloc[-1].to_dict()
-    print(f"Last row keys: {list(last.keys())}")
+    logging.debug(f"Last row keys: {list(last.keys())}")
 
     last["rule_state"] = ta_signal(df.iloc[-1])
-    print(f"Rule state: {last['rule_state']}")
+    logging.debug(f"Rule state: {last['rule_state']}")
 
     state["ta_df_json"] = json.dumps({"last": last}, default=str)
-    print(f"TA JSON length: {len(state['ta_df_json'])}")
-    print(f"TA JSON preview: {state['ta_df_json'][:200]}...")
+    logging.debug(f"TA JSON length: {len(state['ta_df_json'])}")
+    logging.debug(f"TA JSON preview: {state['ta_df_json'][:200]}...")
 
     return state
 
 
 def node_fuse(state: State) -> State:
-    print("\n=== NODE_FUSE DEBUG ===")
-    print(f"TA data length: {len(state['ta_df_json'])}")
-    print(f"TA data: {state['ta_df_json']}")
-    print(f"News count: {len(state['news'])}")
-    print(f"Sentiment: {state['sentiment']}")
+    logging.debug("\n=== NODE_FUSE DEBUG ===")
+    logging.debug(f"TA data length: {len(state['ta_df_json'])}")
+    logging.debug(f"TA data: {state['ta_df_json']}")
+    logging.debug(f"News count: {len(state['news'])}")
+    logging.debug(f"Sentiment: {state['sentiment']}")
 
     news_bullets = "\n".join(
         [f"- {n.get('title','')} ({n.get('source','')})" for n in state["news"]]
@@ -90,30 +91,30 @@ def node_fuse(state: State) -> State:
         f"Sentiment scores: {state['sentiment']}\n"
     )
 
-    print(f"Query input length: {len(query_input)}")
-    print("Calling LLM...")
+    logging.debug(f"Query input length: {len(query_input)}")
+    logging.debug("Calling LLM...")
 
     try:
         out = llm.invoke(
             [HumanMessage(content=FUSE_PROMPT + "\n\n" + query_input)]
         ).content
-        print(f"LLM response length: {len(out)}")
-        print(f"LLM response: {out}")
+        logging.debug(f"LLM response length: {len(out)}")
+        logging.debug(f"LLM response: {out}")
 
         start = out.find("{")
         end = out.rfind("}")
 
-        print(f"JSON start index: {start}, end index: {end}")
+        logging.debug(f"JSON start index: {start}, end index: {end}")
 
         if start != -1 and end != -1 and end > start:
             state["fuse_json"] = out[start : end + 1]
-            print(f"Extracted JSON: {state['fuse_json']}")
+            logging.debug(f"Extracted JSON: {state['fuse_json']}")
         else:
             state["fuse_json"] = '{"error":"no_json_found"}'
-            print("No valid JSON found in LLM response")
+            logging.debug("No valid JSON found in LLM response")
 
     except Exception as e:
-        print(f"Exception in node_fuse: {e}")
+        logging.debug(f"Exception in node_fuse: {e}")
         state["fuse_json"] = f'{{"error":"llm_exception","message":"{str(e)}"}}'
 
     return state
