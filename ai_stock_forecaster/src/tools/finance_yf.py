@@ -1,10 +1,30 @@
 import pandas as pd
 import yfinance as yf
+from datetime import datetime, timedelta
 
 
 def get_daily(symbol: str, period="max", interval="1d") -> pd.DataFrame:
+    """Fetch daily price data for a symbol.
+
+    Accepts standard yfinance `period` values (e.g., '1y', '5y', 'max') and
+    additionally supports '15y' and '20y' by converting them to explicit start
+    dates and calling `history(start=..., end=...)`.
+    """
     ticker = yf.Ticker(symbol)
-    df = ticker.history(period=period, interval=interval, auto_adjust=True)
+
+    # Handle extended multi-year periods not directly supported by yfinance period
+    if period in ("15y", "20y"):
+        years = int(period.replace("y", ""))
+        end = datetime.utcnow().date()
+        start = end - timedelta(days=365 * years)
+        df = ticker.history(
+            start=start.isoformat(),
+            end=end.isoformat(),
+            interval=interval,
+            auto_adjust=True,
+        )
+    else:
+        df = ticker.history(period=period, interval=interval, auto_adjust=True)
 
     if df.empty:
         raise RuntimeError(

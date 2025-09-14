@@ -27,6 +27,20 @@ def plot_prices_and_signals(df_feat, sig_rule, sig_ml):
     fig.add_trace(go.Scatter(x=x_dates, y=df_feat["sma_10"], name="SMA10"))
     fig.add_trace(go.Scatter(x=x_dates, y=df_feat["sma_50"], name="SMA50"))
 
+    # Add new technical indicators if available
+    if "ema_12" in df_feat.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_dates, y=df_feat["ema_12"], name="EMA12", line=dict(dash="dot")
+            )
+        )
+    if "bb_mid" in df_feat.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=x_dates, y=df_feat["bb_mid"], name="BB Mid", line=dict(dash="dash")
+            )
+        )
+
     # Get signal dates and convert to strings
     rule_signal_mask = sig_rule.astype(bool)
     ml_signal_mask = sig_ml.astype(bool)
@@ -99,10 +113,20 @@ with ui.row().classes("w-full"):
     with ui.card().classes("min-w-[320px] max-w-[420px]"):
         ui.label("Inputs").classes("text-lg font-medium")
         symbol_in = ui.input("Ticker", value="AAPL")
-        provider_sel = ui.select(["yf"], value="yf", label="Provider")
-        outputsize_sel = ui.select(
-            ["compact", "full"], value="compact", label="AlphaVantage outputsize"
+        period_sel = ui.select(
+            options={
+                "1y": "1 Year",
+                "2y": "2 Years",
+                "5y": "5 Years",
+                "10y": "10 Years",
+                "15y": "15 Years",
+                "20y": "20 Years",
+                "max": "Max",
+            },
+            value="5y",
+            label="Time Period",
         )
+        provider_sel = ui.select(["yf"], value="yf", label="Provider")
         fee_in = ui.number(label="Fee (bps per trade)", value=1.0, step=0.5, min=0)
         run_btn = ui.button("Run", color="primary")
         status = ui.label().classes("text-sm text-gray-500")
@@ -142,7 +166,11 @@ async def _run():
         app = build_graph()
 
         status.text = "Processing... Fetching data"
-        state = {"question": "", "symbol": symbol_in.value.strip().upper()}
+        state = {
+            "question": "",
+            "symbol": symbol_in.value.strip().upper(),
+            "period": period_sel.value,
+        }
         if provider_sel.value == "alpha":
             state["provider"] = "alpha"
         out = app.invoke(state)
@@ -186,6 +214,7 @@ async def _run():
         meta = {
             "provider": out["provider"],
             "symbol": out["symbol"],
+            "period": out.get("period", "max"),
             "rows": len(out["data"]),
         }
         meta_json.set_content(json.dumps(meta, indent=2))

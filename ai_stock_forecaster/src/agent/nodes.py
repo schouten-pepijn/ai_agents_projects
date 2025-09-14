@@ -1,7 +1,7 @@
 from .schema import State
 from src.tools.finance_yf import get_daily
 from src.core.features import technical_indicators
-from src.core.models import rule_signal, ml_signal
+from src.core.models import ml_signal
 from src.core.backtest import run_backtest
 from src.core.report import summarize
 
@@ -22,9 +22,10 @@ def route_question(state: State) -> State:
 
 def fetch(state: State) -> State:
     symbol = state["symbol"]
+    period = state.get("period", "max")  # Default to "max" if not specified
 
     try:
-        df = get_daily(symbol)
+        df = get_daily(symbol, period=period)
 
     except Exception as e:
         raise ValueError(f"Error fetching data for {symbol}: {e}") from e
@@ -43,7 +44,10 @@ def featurize(state: State) -> State:
 def forecast(state: State) -> State:
     features = state["features"]
 
-    state["signals"] = {"rule": rule_signal(features), "ml": ml_signal(features)}
+    # Generate ML signals and get rule signals aligned to same prediction range
+    ml_signals, rule_signals_aligned = ml_signal(features, return_aligned_rule=True)
+
+    state["signals"] = {"rule": rule_signals_aligned, "ml": ml_signals}
 
     return state
 
