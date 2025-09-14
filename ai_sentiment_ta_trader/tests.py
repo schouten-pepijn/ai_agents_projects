@@ -1,6 +1,7 @@
 from tools.market import fetch_bars
 from tools.news import fetch_news
 from tools.sentiment import sentiment_vader
+from tools.backtest import run_backtest
 import pandas as pd
 from tools.ta_tools import compute_ta
 
@@ -200,9 +201,29 @@ def test_sentiment_vader():
         "The outlook for the next quarter is neutral.",
     ]
     result = sentiment_vader(texts)
+
     assert isinstance(result, dict)
     assert all(k in result for k in ["neg", "neu", "pos", "compound"])
+
     print(result)
+
+
+def test_run_backtest():
+    data = {
+        "date": pd.date_range("2024-01-01", periods=250, freq="B"),
+        "open": [100 + i * 0.1 for i in range(250)],
+        "high": [101 + i * 0.1 for i in range(250)],
+        "low": [99 + i * 0.1 for i in range(250)],
+        "close": [100 + i * 0.1 + (i % 5 - 2) * 0.5 for i in range(250)],
+        "volume": [1000000 for _ in range(250)],
+    }
+    df = pd.DataFrame(data)
+    result = run_backtest(df)
+
+    assert isinstance(result, dict)
+    assert "Equity Final [$]" in result
+
+    print({k: result[k] for k in list(result)[:5]})
 
 
 if __name__ == "__main__":
@@ -210,3 +231,4 @@ if __name__ == "__main__":
     test_fetch_bars()
     test_compute_ta()
     test_sentiment_vader()
+    test_run_backtest()
