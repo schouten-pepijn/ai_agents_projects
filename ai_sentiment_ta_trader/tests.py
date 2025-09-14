@@ -1,5 +1,6 @@
 from tools.market import fetch_bars
 from tools.news import fetch_news
+from tools.sentiment import sentiment_vader
 import pandas as pd
 from tools.ta_tools import compute_ta
 
@@ -192,7 +193,20 @@ def test_compute_ta():
     print(result[["close", "rsi14", "ema50", "ema200", "atr14", "trend"]].tail())
 
 
+def test_sentiment_vader():
+    texts = [
+        "The stock price soared after the company reported record profits.",
+        "Investors are worried about the recent decline in sales.",
+        "The outlook for the next quarter is neutral.",
+    ]
+    result = sentiment_vader(texts)
+    assert isinstance(result, dict)
+    assert all(k in result for k in ["neg", "neu", "pos", "compound"])
+    print(result)
+
+
 if __name__ == "__main__":
     test_fetch_news()
     test_fetch_bars()
     test_compute_ta()
+    test_sentiment_vader()
