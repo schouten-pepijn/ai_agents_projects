@@ -1,0 +1,10 @@
+langchain==0.2.*
+langgraph==0.2.*
+langchain-ollama==0.1.*
+duckduckgo-search==6.*
+yfinance==0.2.*
+pandas==2.*
+numpy==1.26.*
+ta==0.11.*
+nltk==3.*
+backtesting==0.3.*
