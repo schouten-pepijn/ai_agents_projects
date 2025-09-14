@@ -6,7 +6,7 @@ load_dotenv(".env")
 
 
 class Config(BaseModel):
-    base_url: str = os.getenv("BASE_URL")
+    ollama_base_url: str = os.getenv("BASE_URL")
     ollama_model: str = os.getenv("MODEL_LARGE") or os.getenv("MODEL_SMALL")
 
 
