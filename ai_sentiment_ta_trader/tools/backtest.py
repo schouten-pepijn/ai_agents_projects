@@ -15,7 +15,7 @@ def to_bt(df: pd.DataFrame):
         }
     ).copy()
     d.set_index("Date", inplace=True)
-    # Precompute indicators
+
     d["RSI"] = ta.momentum.RSIIndicator(d["Close"], window=14).rsi()
     d["MA50"] = d["Close"].rolling(50).mean()
     d["MA200"] = d["Close"].rolling(200).mean()
@@ -24,7 +24,7 @@ def to_bt(df: pd.DataFrame):
 
 class RsiTrend(Strategy):
     def init(self):
-        pass  # Indicators are precomputed
+        pass
 
     def next(self):
         rsi = self.data.RSI[-1]
@@ -35,6 +35,7 @@ class RsiTrend(Strategy):
 
         if (rsi < 30) and trend == 1 and not self.position:
             self.buy(size=0.99)
+
         if self.position and (close < ma50 or rsi > 60):
             self.position.close()
 
