@@ -19,6 +19,7 @@ def to_bt(df: pd.DataFrame):
     d["RSI"] = ta.momentum.RSIIndicator(d["Close"], window=14).rsi()
     d["MA50"] = d["Close"].rolling(50).mean()
     d["MA200"] = d["Close"].rolling(200).mean()
+
     return d
 
 
