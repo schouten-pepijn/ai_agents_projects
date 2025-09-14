@@ -1,7 +1,20 @@
-from pydantic_settings import BaseSettings
+import os
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv(".env")
 
 
-class Settings(BaseSettings):
+class Config(BaseModel):
+    base_url: str = os.getenv("BASE_URL")
+    ollama_model: str = os.getenv("MODEL_LARGE") or os.getenv("MODEL_SMALL")
 
-    class Config:
-        env_file = ".env"
+
+class Settings(BaseModel):
+    max_news: int = 8
+    yf_period: str = "1y"
+    yf_interval: str = "1d"
+
+
+config = Config()
+settings = Settings()
