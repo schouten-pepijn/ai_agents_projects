@@ -3,7 +3,7 @@ import pandas as pd
 
 
 def fetch_bars(symbol: str, period: str, interval: str) -> pd.DataFrame:
-    df = yf.download(symbol, period=period, interval=interval)
+    df = yf.download(symbol, period=period, interval=interval, auto_adjust=True)
 
     if df.empty:
         raise ValueError(f"No data found for symbol: {symbol}")
@@ -18,6 +18,7 @@ def fetch_bars(symbol: str, period: str, interval: str) -> pd.DataFrame:
 
     expected = ["date", "open", "high", "low", "close", "volume"]
     missing = [col for col in expected if col not in df.columns]
+
     if missing:
         raise ValueError(f"Missing columns: {missing}")
 

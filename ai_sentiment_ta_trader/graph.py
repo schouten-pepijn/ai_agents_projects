@@ -1,6 +1,7 @@
 import json
 
-from typing import List, TypedDict, Literal
+from typing import List, TypedDict, Literal, Annotated
+from operator import add
 
 from langgraph.graph import StateGraph, START, END
 from langchain_ollama import ChatOllama
@@ -14,12 +15,16 @@ from ta_tools import compute_ta, ta_signal
 from prompts import FUSE_PROMPT
 
 
+def keep_first(x, y):
+    return x if x else y
+
+
 class State(TypedDict):
-    symbol: str
-    news: List[dict]
-    ta_df_json: str
-    sentiment: dict
-    fuse_json: str
+    symbol: Annotated[str, keep_first]
+    news: Annotated[List[dict], add]
+    ta_df_json: Annotated[str, keep_first]
+    sentiment: Annotated[dict, keep_first]
+    fuse_json: Annotated[str, keep_first]
 
 
 llm = ChatOllama(
@@ -28,7 +33,7 @@ llm = ChatOllama(
 
 
 def node_fetch_news(state: State) -> State:
-    query = f"{state['symbol']} stock earnings guidance outlook site:bloomberg.com OR site:reuters.com OR site:cnbc.com"
+    query = f"{state['symbol']} stock earnings guidance outlook"
 
     state["news"] = fetch_news(query, max_hits=5)[: settings.max_news]
 
@@ -44,18 +49,37 @@ def node_sentiment(state: State) -> State:
 
 
 def node_ta(state: State) -> State:
+    print("\n=== NODE_TA DEBUG ===")
+    print(f"Fetching data for symbol: {state['symbol']}")
+
     df = fetch_bars(state["symbol"], settings.yf_period, settings.yf_interval)
+    print(f"DataFrame shape: {df.shape}")
+    print(f"DataFrame columns: {df.columns.tolist()}")
+
     df = compute_ta(df)
+    print(f"DataFrame shape after TA: {df.shape}")
+    print(f"DataFrame columns after TA: {df.columns.tolist()}")
 
     last = df.iloc[-1].to_dict()
+    print(f"Last row keys: {list(last.keys())}")
+
     last["rule_state"] = ta_signal(df.iloc[-1])
+    print(f"Rule state: {last['rule_state']}")
 
     state["ta_df_json"] = json.dumps({"last": last}, default=str)
+    print(f"TA JSON length: {len(state['ta_df_json'])}")
+    print(f"TA JSON preview: {state['ta_df_json'][:200]}...")
 
     return state
 
 
 def node_fuse(state: State) -> State:
+    print("\n=== NODE_FUSE DEBUG ===")
+    print(f"TA data length: {len(state['ta_df_json'])}")
+    print(f"TA data: {state['ta_df_json']}")
+    print(f"News count: {len(state['news'])}")
+    print(f"Sentiment: {state['sentiment']}")
+
     news_bullets = "\n".join(
         [f"- {n.get('title','')} ({n.get('source','')})" for n in state["news"]]
     )
@@ -65,15 +89,32 @@ def node_fuse(state: State) -> State:
         f"News summary bullets:\n{news_bullets}\n\n"
         f"Sentiment scores: {state['sentiment']}\n"
     )
-    out = llm.invoke([HumanMessage(content=FUSE_PROMPT + "\n\n" + query_input)]).content
+
+    print(f"Query input length: {len(query_input)}")
+    print("Calling LLM...")
 
     try:
+        out = llm.invoke(
+            [HumanMessage(content=FUSE_PROMPT + "\n\n" + query_input)]
+        ).content
+        print(f"LLM response length: {len(out)}")
+        print(f"LLM response: {out}")
+
         start = out.find("{")
         end = out.rfind("}")
-        state["fuse_json"] = out[start : end + 1]
 
-    except Exception:
-        state["fuse_json"] = '{"error":"llm_return_format"}'
+        print(f"JSON start index: {start}, end index: {end}")
+
+        if start != -1 and end != -1 and end > start:
+            state["fuse_json"] = out[start : end + 1]
+            print(f"Extracted JSON: {state['fuse_json']}")
+        else:
+            state["fuse_json"] = '{"error":"no_json_found"}'
+            print("No valid JSON found in LLM response")
+
+    except Exception as e:
+        print(f"Exception in node_fuse: {e}")
+        state["fuse_json"] = f'{{"error":"llm_exception","message":"{str(e)}"}}'
 
     return state
 
