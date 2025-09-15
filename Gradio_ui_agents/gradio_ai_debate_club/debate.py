@@ -1,11 +1,11 @@
 import random
 from typing import List
 from langchain_core.messages import HumanMessage
-from .state import DebateState, Role, Utterance
-from .prompts import pro_sys, con_sys, mod_judge_tpl, final_synth_tpl
-from .config import MIN_ROUNDS, MAX_ROUNDS
-from .config import llm_pro, llm_con, llm_mod
-from .streaming import stream_llm
+from state import DebateState, Role, Utterance
+from prompts import pro_sys, con_sys, mod_judge_tpl, final_synth_tpl
+from config import MIN_ROUNDS, MAX_ROUNDS
+from config import llm_pro, llm_con, llm_mod
+from streaming import stream_llm
 
 
 def parse_judgement(text: str):
