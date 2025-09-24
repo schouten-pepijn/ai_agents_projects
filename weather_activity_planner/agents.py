@@ -15,7 +15,7 @@ from tools import (
     ticketmaster_events,
     geoapify_places,
     _parse_geoapify_place,
-    serpapi_google_events
+    serpapi_google_events,
 )
 from planner import build_plan, append_pois_when_sparse
 from config import config, constants
@@ -30,22 +30,21 @@ class State(TypedDict):
     places: List[Place]
     plan: Plan
     narrative: str
-    
+
 
 def get_llm():
     return ChatOllama(
-        model=config.LLM_MODEL,
-        base_url=config.BASE_URL,
-        temperature=0.6,
-        max_retries=3
+        model=config.LLM_MODEL, base_url=config.BASE_URL, temperature=0.6, max_retries=3
     )
-    
+
+
 def get_embedder():
     return OllamaEmbeddings(
         model=config.EMBED_MODEL,
         base_url=config.BASE_URL,
     )
-    
+
+
 async def classify_indoor_node(state: State) -> State:
     if not state.get("events"):
         return state
@@ -82,7 +81,7 @@ async def classify_indoor_node(state: State) -> State:
             "- INDOOR examples: museum, theater, cinema, club, gallery, conference, expo, arena (if roofed).\n"
             "- OUTDOOR examples: park, festival, open-air concert, beach, marathon, street market, stadium (open).\n"
             "- If ambiguous, choose the most likely based on description and venue.\n"
-            "- Respond ONLY as compact JSON array. Each item: {\"id\": str, \"indoor\": true|false}.\n\n"
+            '- Respond ONLY as compact JSON array. Each item: {"id": str, "indoor": true|false}.\n\n'
             f"Events:\n{json.dumps(recs, ensure_ascii=False)}\n\n"
             "Return JSON now."
         )
@@ -119,55 +118,73 @@ async def classify_indoor_node(state: State) -> State:
 
     state["events"] = events
     return state
-    
+
+
 async def city_node(state: State) -> State:
     q = state["query"]
-    feats = await geoapify_autocomplete_city(q.city_query) if os.getenv("GEOAPIFY_KEY") else []
-    
+    feats = (
+        await geoapify_autocomplete_city(q.city_query)
+        if os.getenv("GEOAPIFY_KEY")
+        else []
+    )
+
     if feats:
         lon, lat = feats[0]["geometry"]["coordinates"]
         props = feats[0]["properties"]
-        state["city"] = City(query=q.city_query, lat=float(lat), lon=float(lon), country=props.get("country_code"), label=props.get("formatted"))
-    
+        state["city"] = City(
+            query=q.city_query,
+            lat=float(lat),
+            lon=float(lon),
+            country=props.get("country_code"),
+            label=props.get("formatted"),
+        )
+
     else:
         state["city"] = await geoapify_forward_geocode(q.city_query)
-    
+
     return state
 
 
 async def weather_node(state: State) -> State:
     c = state["city"]
     state["weather"] = await open_meteo_forecast(c.lat, c.lon)
-    
+
     return state
+
 
 async def events_node(state: State) -> State:
     q = state["query"]
-    
-    start_iso = q.date_from.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
-    end_iso   = q.date_to.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
+
+    start_iso = q.date_from.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    end_iso = q.date_to.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     lat, lon = state["city"].lat, state["city"].lon
- 
+
     preferences = q.preferences or {}
     radius_km = preferences.get("radius_km", 20)
     activity_types = preferences.get("activity_types", [])
     additional_prefs = preferences.get("additional_preferences", "")
-    
-    tm_events_task = ticketmaster_events(lat, lon, start_iso, end_iso, radius_km=radius_km)
-    serp_events_task = serpapi_google_events(state["city"], start_iso, end_iso, query="events")
 
-    tm_events, g_events = await asyncio.gather(tm_events_task, serp_events_task, return_exceptions=True)
-    
+    tm_events_task = ticketmaster_events(
+        lat, lon, start_iso, end_iso, radius_km=radius_km
+    )
+    serp_events_task = serpapi_google_events(
+        state["city"], start_iso, end_iso, query="events"
+    )
+
+    tm_events, g_events = await asyncio.gather(
+        tm_events_task, serp_events_task, return_exceptions=True
+    )
+
     all_events = []
-    
+
     # Handle Ticketmaster events
     if isinstance(tm_events, Exception):
         tm_events = []
-        
-    # Handle SerpAPI events  
+
+    # Handle SerpAPI events
     if isinstance(g_events, Exception):
         g_events = []
-    
+
     all_events.extend(tm_events or [])
     all_events.extend(g_events or [])
 
@@ -175,66 +192,66 @@ async def events_node(state: State) -> State:
     # Rank events by similarity to user preferences if provided
     if activity_types:
         pref_text = ", ".join(activity_types).strip().lower()
-        
+
         if additional_prefs:
             pref_text = f"{pref_text}, {additional_prefs}".strip().lower()
-        
+
         if pref_text:
             embedder = get_embedder()
             query_vec = embedder.embed_query(pref_text)
-            
+
             event_texts = [
                 f"{e.name} {e.description or ''} {e.category or ''}".strip()
                 for e in all_events
             ]
             doc_vecs = embedder.embed_documents(event_texts)
-            
+
             # calculate cosine similarities
             if doc_vecs:
                 ev_matrix = np.vstack(doc_vecs)
                 pref_norm = np.linalg.norm(query_vec)
                 ev_norms = np.linalg.norm(ev_matrix, axis=1)
-                
+
                 sims = (ev_matrix @ query_vec) / (ev_norms * pref_norm + 1e-7)
-                
+
                 # Sort by similarity but don't filter out everything
                 ranked_ids = np.argsort(-sims)
                 ranked_events = [all_events[i] for i in ranked_ids]
 
     state["events"] = ranked_events
-    
+
     return state
 
 
 async def places_node(state: State) -> State:
     c = state["city"]
     q = state["query"]
-    
+
     preferences = q.preferences or {}
     # Limit radius to reasonable bounds for Geoapify API
     radius_km = min(preferences.get("radius_km", 10), 10)
-    
+
     # Use selected place categories from UI, or default to predefined set
     selected_categories = preferences.get("place_categories", [])
-    
+
     if selected_categories:
         categories_str = ",".join(selected_categories)
-        
+
     else:
         categories_str = constants.GEOAPIFY_CATEGORIES
 
     feats = await geoapify_places(c.lat, c.lon, categories_str, radius_km=radius_km)
-    
+
     state["places"] = [_parse_geoapify_place(f) for f in feats]
-    
+
     return state
 
 
 async def plan_node(state: State) -> State:
-    
+
     state["plan"] = await build_plan(state["city"], state["events"], state["weather"])
     append_pois_when_sparse(state["plan"], state["places"], state["weather"], k=6)
-    
+
     return state
 
 
@@ -242,16 +259,16 @@ async def narrative_node(state: State) -> State:
     llm = get_llm()
 
     id2event = {e.id: e for e in state.get("events", [])}
-    id2poi   = {f"poi::{p.id}": p for p in state.get("places", [])}
+    id2poi = {f"poi::{p.id}": p for p in state.get("places", [])}
 
     # Helper to resolve a human-readable label for either event or poi
     def _label(item) -> str:
         if item.event_id in id2event:
             return id2event[item.event_id].name or "Event"
-        
+
         if item.event_id in id2poi:
             return id2poi[item.event_id].name or "Place"
-        
+
         return "Suggestion"
 
     top = state["plan"].items[:8]
@@ -259,17 +276,17 @@ async def narrative_node(state: State) -> State:
     bullets = "\n".join([f"- {_label(i)} ({i.reason})" for i in top])
 
     q = state["query"]
-    preferences = (q.preferences or {})
+    preferences = q.preferences or {}
     activity_types = preferences.get("activity_types", [])
     additional_prefs = preferences.get("additional_preferences", "")
 
     prefs_chunks = []
     if activity_types:
         prefs_chunks.append(f"User prefers: {', '.join(activity_types)}.")
-        
+
     if additional_prefs:
         prefs_chunks.append(f"Additional preferences: {additional_prefs}.")
-        
+
     preference_context = " ".join(prefs_chunks)
 
     prompt = f"""Write a concise activity plan for {state['city'].query}. 8-10 items. One sentence each.
@@ -280,7 +297,7 @@ Recommended activities:
 {bullets}
 
 Create a narrative that considers the user's preferences and explains why these activities are suitable."""
-   
+
     out = await llm.ainvoke(prompt)
     state["narrative"] = out.content
     return state
@@ -288,7 +305,7 @@ Create a narrative that considers the user's preferences and explains why these 
 
 def build_graph():
     g = StateGraph(State)
-    
+
     g.add_node("city", city_node)
     g.add_node("weather", weather_node)
     g.add_node("events", events_node)
@@ -296,14 +313,14 @@ def build_graph():
     g.add_node("places", places_node)
     g.add_node("plan", plan_node)
     g.add_node("narrative", narrative_node)
-    
+
     g.set_entry_point("city")
-    g.add_edge("city","weather")
-    g.add_edge("weather","events")
-    g.add_edge("events","classify_indoor")
-    g.add_edge("classify_indoor","places")
-    g.add_edge("places","plan")
-    g.add_edge("plan","narrative")
+    g.add_edge("city", "weather")
+    g.add_edge("weather", "events")
+    g.add_edge("events", "classify_indoor")
+    g.add_edge("classify_indoor", "places")
+    g.add_edge("places", "plan")
+    g.add_edge("plan", "narrative")
     g.add_edge("narrative", END)
-    
+
     return g.compile()

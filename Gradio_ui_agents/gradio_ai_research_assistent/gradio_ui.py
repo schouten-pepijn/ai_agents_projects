@@ -1,6 +1,7 @@
 import gradio as gr
 from runner import run_research_assistant
 
+
 def create_gradio_web_app():
     """
     Creates and configures a Gradio web application for an AI Research Assistant.
@@ -19,15 +20,20 @@ def create_gradio_web_app():
         gr.Blocks: The configured Gradio web application.
     """
     with gr.Blocks(title="AI Research Assistant") as web_app:
-        gr.Markdown("### AI Research Assistant\nEnter a question. The agent searches, synthesizes, and cites.")
-        
+        gr.Markdown(
+            "### AI Research Assistant\nEnter a question. The agent searches, synthesizes, and cites."
+        )
+
         with gr.Row():
-            question = gr.Textbox(label="Question", placeholder="Example: 'What is the most effective way to learn Python?'")
+            question = gr.Textbox(
+                label="Question",
+                placeholder="Example: 'What is the most effective way to learn Python?'",
+            )
 
         with gr.Row():
             rounds = gr.Slider(1, 4, value=2, step=1, label="Research rounds")
             max_results = gr.Slider(2, 10, value=5, step=1, label="Results per query")
-            
+
         run_btn = gr.Button("Start Research")
 
         answer = gr.Markdown(label="Answer")
@@ -35,7 +41,7 @@ def create_gradio_web_app():
             headers=["id", "title", "url"],
             datatype=["number", "str", "str"],
             interactive=False,
-            label="Web sources"
+            label="Web sources",
         )
         actions = gr.Textbox(label="Actions (audit trail)", interactive=False)
 
@@ -44,8 +50,9 @@ def create_gradio_web_app():
             inputs=[question, rounds, max_results],
             outputs=[answer, sources, actions],
         )
-        
+
     return web_app
+
 
 if __name__ == "__main__":
     web_app = create_gradio_web_app()

@@ -5,9 +5,7 @@ from langchain_ollama import ChatOllama
 load_dotenv(".env")
 
 MODEL = (
-    os.getenv("MODEL_LARGE")
-    or os.getenv("MODEL_MEDIUM")
-    or os.getenv("MODEL_SMALL")
+    os.getenv("MODEL_LARGE") or os.getenv("MODEL_MEDIUM") or os.getenv("MODEL_SMALL")
 )
 
 # Default temperatures (can be overridden)
@@ -34,8 +32,8 @@ llm_con = build_model(TEMP_CON)
 llm_mod = build_model(TEMP_MOD)
 
 # Streaming behaviour
-CHUNK_DELAY = float(os.getenv("STREAM_DELAY", 0.06)) 
-BATCH_CHARS = int(os.getenv("STREAM_BATCH_CHARS", 18))  
+CHUNK_DELAY = float(os.getenv("STREAM_DELAY", 0.06))
+BATCH_CHARS = int(os.getenv("STREAM_BATCH_CHARS", 18))
 
 # Debate constraints
 MIN_ROUNDS = 2

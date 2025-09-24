@@ -1,5 +1,4 @@
 from graph import build_graph
-from config import settings
 import json
 import logging
 
@@ -11,7 +10,7 @@ if __name__ == "__main__":
     logging.debug("Building graph...")
     app = build_graph()
 
-    symbol = "BTC-USD"
+    symbol = "ASML"
     logging.debug(f"Using symbol: {symbol}")
 
     state = {

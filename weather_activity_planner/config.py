@@ -4,24 +4,22 @@ from dotenv import load_dotenv
 
 load_dotenv(".env")
 
+
 @dataclass(frozen=True)
 class Config:
     # OM = os.getenv("OM_API_KEY")  # Open Meteo
     TMK: str = os.getenv("TMK_API_KEY")  # Ticket Master
     GEOAPP_KEY: str = os.getenv("GEOAPP_API_KEY")  # Geoapify
     SERPAPI_KEY: str = os.getenv("SERPAPI_API_KEY")  # SerpApi
-    
+
     # Feature flags
     TICKETMASTER_ENABLED: bool = True if TMK else False
     SERPAPI_ENABLED: bool = True  # Enable SerpAPI by default if key is available
-    
-    LLM_MODEL: str = (
-        os.getenv("MODEL_LARGE")
-        or os.getenv("MODEL_SMALL")
-    )
+
+    LLM_MODEL: str = os.getenv("MODEL_LARGE") or os.getenv("MODEL_SMALL")
     BASE_URL: str = os.getenv("BASE_URL")  # Ollama base URL
     EMBED_MODEL: str = os.getenv("EMBED_MODEL") or "nomic-embed-text"
-    
+
     TICKETMASTER_ENABLED: bool = True
 
 
@@ -49,15 +47,18 @@ class Constants:
         "gallery",
         "exhibition",
     ]
-    GEOAPIFY_CATEGORIES = ",".join([
-        "entertainment.museum",
-        "entertainment.zoo",
-        "entertainment.theme_park",
-        "entertainment.aquarium",
-        "leisure.park",
-        "tourism.sights",
-        "commercial.shopping_mall"
-    ])
+    GEOAPIFY_CATEGORIES = ",".join(
+        [
+            "entertainment.museum",
+            "entertainment.zoo",
+            "entertainment.theme_park",
+            "entertainment.aquarium",
+            "leisure.park",
+            "tourism.sights",
+            "commercial.shopping_mall",
+        ]
+    )
+
 
 config = Config()
 constants = Constants()

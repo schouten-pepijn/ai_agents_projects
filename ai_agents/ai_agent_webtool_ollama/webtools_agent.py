@@ -9,13 +9,13 @@ from langchain_core.messages import HumanMessage
 from langchain.callbacks.base import BaseCallbackHandler
 
 
-
 load_dotenv(".env")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 MODEL = os.getenv("MODEL_EXT")  # Changed to getenv for safety
 
 WEB_SEARCH_TOOL = "duckduckgo"
+
 
 @dataclass
 class ToolCall:
@@ -28,6 +28,7 @@ class ToolCollector(BaseCallbackHandler):
     """
     Callback handler to collect tool calls made by the agent.
     """
+
     def __init__(self):
         self.calls = []
 
@@ -36,14 +37,13 @@ class ToolCollector(BaseCallbackHandler):
         self.calls.append(ToolCall(name=tool_name, input=input_str, output=""))
 
     def on_tool_end(self, output: Any, **kwargs: Any):
-        for i in range(len(self.calls) -1, -1, -1):
-            if self.calls[i].output is None:
+        for i in range(len(self.calls) - 1, -1, -1):
+            if not self.calls[i].output:
                 self.calls[i].output = output
                 break
 
     def on_tool_error(self, error: Exception, **kwargs: Any):
         self.calls.append(ToolCall(name="tool_error", input="", output=str(error)))
-        
 
 
 def build_agent():
@@ -56,22 +56,19 @@ def build_agent():
 
     if not base_url or not model_id:
         raise ValueError("BASE_URL and MODEL must be set in environment variables.")
-    
-    llm = ChatOllama(
-        base_url=base_url,
-        model=model_id,
-        temperature=0.2
-    )
-    
+
+    llm = ChatOllama(base_url=base_url, model=model_id, temperature=0.2)
+
     ddg_results = DuckDuckGoSearchResults(name="duckduckgo_search")
     tools = [ddg_results]
     llm_agent = create_react_agent(llm, tools=tools)
-    
+
     return llm_agent
+
 
 def extract_sources_from_output(output: Any) -> List[Tuple[str, Optional[str]]]:
     sources = []
-    
+
     if isinstance(output, list):
         for item in output:
             if isinstance(item, dict):
@@ -152,4 +149,6 @@ def run(query: str, stream: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    run("Summarize what a general ledger is. Use a tool and keep it short.", stream=True)
+    run(
+        "Summarize what a general ledger is. Use a tool and keep it short.", stream=True
+    )

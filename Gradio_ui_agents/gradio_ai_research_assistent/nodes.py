@@ -30,35 +30,36 @@ def generate_queries(state: GraphState) -> GraphState:
         - If no queries are generated, the user's original question is used as a fallback.
     """
     user_q = _get_user_question(state)
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            "Generate {k} web search queries to answer the users question.\n"
-            "Rules:\n- Consider different perspectives\n- Be concise, max 8 words per query\n"
-            "-Do not use quotes\n- Answer in English."
-        ),
-        (
-            "user", "{question}"
-        )
-    ])
-    
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Generate {k} web search queries to answer the users question.\n"
+                "Rules:\n- Consider different perspectives\n- Be concise, max 8 words per query\n"
+                "-Do not use quotes\n- Answer in English.",
+            ),
+            ("user", "{question}"),
+        ]
+    )
+
     chain = prompt | llm
-    
-    k = max(2, min(6, math.ceil(state["max_results_per_query"]/2)))
+
+    k = max(2, min(6, math.ceil(state["max_results_per_query"] / 2)))
     response = chain.invoke({"k": k, "question": user_q})
     raw = response.content.strip().split("\n")
-    
+
     queries = []
     for line in raw:
         q = line.strip("-• 1234567890. ").strip()
         if q:
             queries.append(q)
     queries = list(dict.fromkeys(queries))
-    
+
     state["queries"] = queries or [user_q]
     state["actions"].append(f"generate_queries({len(state['queries'])})")
 
     return state
+
 
 def web_search(state: GraphState) -> GraphState:
     """
@@ -79,34 +80,33 @@ def web_search(state: GraphState) -> GraphState:
     """
     results: List[Dict] = state.get("hits", [])
     limit = state["max_results_per_query"]
-    
-    for q in state["queries"]:        
+
+    for q in state["queries"]:
         if bool(CONFIG.use_tavily) and CONFIG.use_tavily.lower() == "true":
             res = tavily.search(q, max_results=limit)
-            
+
             for r in res.get("results", []):
-                results.append({
-                    "query": q,
-                    "title": r.get("title"),
-                    "url": r.get("url"),
-                    "content": r.get("content") or r.get("snippet") or "" 
-                })
+                results.append(
+                    {
+                        "query": q,
+                        "title": r.get("title"),
+                        "url": r.get("url"),
+                        "content": r.get("content") or r.get("snippet") or "",
+                    }
+                )
         else:
             with DDGS() as ddgs:
-                    for r in ddgs.text(q, max_results=limit):
-                        title = r.get('title') or r.get('name') or r.get('body', '')[:120]
-                        url = r.get('href') or r.get('url') or r.get('link') or ""
-                        content = r.get('body') or r.get('text') or ""
-                        results.append({
-                            "query": q,
-                            "title": title,
-                            "url": url,
-                            "content": content
-                        })
+                for r in ddgs.text(q, max_results=limit):
+                    title = r.get("title") or r.get("name") or r.get("body", "")[:120]
+                    url = r.get("href") or r.get("url") or r.get("link") or ""
+                    content = r.get("body") or r.get("text") or ""
+                    results.append(
+                        {"query": q, "title": title, "url": url, "content": content}
+                    )
 
     state["hits"] = results
     state["actions"].append(f"web_search({len(results)})")
-    
+
     return state
 
 
@@ -114,7 +114,7 @@ def synthesize(state: GraphState) -> GraphState:
     """
     Synthesizes a concise, factual answer to a user's question based on provided source fragments.
     Args:
-        state (GraphState): The current state of the graph containing user question, source hits, 
+        state (GraphState): The current state of the graph containing user question, source hits,
                             and other contextual information.
     Returns:
         GraphState: The updated state with the synthesized answer and an appended action log.
@@ -127,28 +127,30 @@ def synthesize(state: GraphState) -> GraphState:
     """
     user_q = _get_user_question(state)
     sources_view = _compact_sources_for_llm(state["hits"], max_chars=8000)
-    
-    prompt = ChatPromptTemplate.from_messages([
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
             (
                 "system",
                 "You are a pragmatic research synthesizer.\n"
                 "Produce a concise, factual answer with bullet-point findings and clear references [n].\n"
-                "Mention uncertainties. No opinions. No excessive text."
+                "Mention uncertainties. No opinions. No excessive text.",
             ),
             (
                 "human",
                 "Question:\n{question}\n\nSource fragments:\n{sources}\n\n"
-                "Instruction: First provide a short conclusion, then bullets with justification and [source index]."
-            )
-        ])
-    
+                "Instruction: First provide a short conclusion, then bullets with justification and [source index].",
+            ),
+        ]
+    )
+
     chain = prompt | llm
 
     response = chain.invoke({"question": user_q, "sources": sources_view})
-    
+
     state["answer"] = response.content
     state["actions"].append("synthesize")
-    
+
     return state
 
 
@@ -167,16 +169,17 @@ def router(state: GraphState) -> GraphState:
         appended action.
     """
     nxt = state["round_idx"] + 1
-    
+
     if nxt < state["max_rounds"]:
         state["actions"].append(f"router(loop_{nxt})")
-        
+
     else:
         state["actions"].append("router(final)")
-    
+
     state["round_idx"] = nxt
-    
+
     return state
+
 
 def should_continue(state: GraphState) -> str:
     """

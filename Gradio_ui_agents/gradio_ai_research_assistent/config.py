@@ -6,10 +6,11 @@ from tavily import TavilyClient
 
 load_dotenv(".env")
 
+
 @dataclass(frozen=True)
 class Config:
     """
-    Config class is responsible for managing configuration settings and providing utility methods 
+    Config class is responsible for managing configuration settings and providing utility methods
     to initialize various components of the application.
     Attributes:
         model (str): The name of the model to be used, fetched from the environment variable `MODEL_SMALL`.
@@ -24,30 +25,27 @@ class Config:
         get_graph():
             Builds and returns a graph instance using the `build_graph` function from the `graph` module.
     """
+
     # model: str = os.environ["MODEL_SMALL"]
     model: str = os.environ["MODEL_LARGE"]
     base_url: str = os.environ["BASE_URL"]
     tavily_api_key: str = os.environ["TAVILY_API_KEY"]
-    use_tavily: bool = os.environ.get("USE_TAVILY", False)
-    
+    use_tavily: str = os.environ.get("USE_TAVILY", "false")
+
     def get_llm(self):
-        return ChatOllama(
-            model=self.model,
-            base_url=self.base_url,
-            temperature=0.1
-        )
+        return ChatOllama(model=self.model, base_url=self.base_url, temperature=0.1)
 
     def get_web_search_client(self):
         if self.use_tavily:
-            return TavilyClient(
-                api_key=self.tavily_api_key
-            )
+            return TavilyClient(api_key=self.tavily_api_key)
         else:
             return None
 
     def get_graph(self):
         from graph import build_graph
+
         return build_graph()
+
 
 CONFIG = Config()
 
