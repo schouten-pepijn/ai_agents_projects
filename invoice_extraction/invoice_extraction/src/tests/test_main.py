@@ -1,6 +1,6 @@
 import logging
 from docling.document_converter import DocumentConverter
-from docling.chunking import HierarchicalChunker, HybridChunker
+from docling.chunking import HybridChunker
 
 from core.dockling_extractor import DoclingRAGExtractor
 from core.vectorstore_in_mem import VectorStoreInMem
@@ -20,7 +20,11 @@ def test_main():
     logger.debug("Creating in-memory vector store, converter, and chunker")  
     vector_store = VectorStoreInMem(emb_model=emb_client)
     converter = DocumentConverter()
-    chunker = HierarchicalChunker(merge_list_items=True)
+    chunker = HybridChunker(
+        tokenizer="sentence-transformers/all-MiniLM-L6-v2",
+        max_tokens=1024,
+        merge_peers=True
+    )
     tools = ToolRegistry()
     
     # chunker = HybridChunker(
@@ -49,17 +53,18 @@ def test_main():
     logger.debug("Processing document to extract chunks")
     chunks = parser.process_document(file_bytes)
     logger.debug(f"Parsed {len(chunks)} chunks")
-
-    for i, chunk in enumerate(chunks):
-        logger.debug(f"Chunk {i}: {chunk}")
     
     logger.debug("Adding chunks to vector store")
     vector_store.add_chunks(chunks)
     
-    logger.debug("Searching for relevant chunks for field 'Total Amount'")
-    parser.extract_fields(
-        field_schema=field_schema,
-    )
+    logger.debug("Extracting fields from invoice")
+    extracted_data = parser.extract_fields(field_schema=field_schema)
+    
+    logger.info("\n=== EXTRACTION RESULTS ===")
+    for field_name, value in extracted_data.items():
+        logger.info(f"{field_name}: {value}")
+    
+    return extracted_data
 
         
 test_main()

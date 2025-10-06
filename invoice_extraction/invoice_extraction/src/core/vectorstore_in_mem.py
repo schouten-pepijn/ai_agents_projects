@@ -24,12 +24,13 @@ class VectorStoreInMem:
         
         logger.info(f"Added {len(chunks)} chunks to vectorstore, total {len(self.chunks)} chunks")
         
-    def search(self, query, top_k=5) -> List[Dict[str, Any]]:
+    def search(self, query, top_k=5, min_similarity=0.0) -> List[Dict[str, Any]]:
+        """Search for relevant chunks with optional minimum similarity threshold"""
         if not self.chunks:
             logger.warning("Vector store is empty, cannot search")
             return []
         
-        logger.info(f"Searching for top {top_k} chunks relevant to query")
+        logger.info(f"Searching for top {top_k} chunks relevant to query: '{query[:50]}...'")
         
         query_emb = self.emb_model.embed_query(query)
         
@@ -38,17 +39,24 @@ class VectorStoreInMem:
         similarities = []
         for i, doc_emb in enumerate(self.embs):
             score = self._cosine_similarity(query_emb, doc_emb)
-            similarities.append((score, i))
+            if score >= min_similarity:
+                similarities.append((score, i))
+        
+        if not similarities:
+            logger.warning(f"No chunks found above minimum similarity {min_similarity}")
+            # Return top chunks anyway but with low scores
+            similarities = [(self._cosine_similarity(query_emb, doc_emb), i) 
+                          for i, doc_emb in enumerate(self.embs)]
             
         similarities.sort(reverse=True, key=lambda x: x[0])
         
         results = []
         for score, idx in similarities[:top_k]:
             chunk = self.chunks[idx].copy()
-            chunk["similarity_score"] = score
+            chunk["similarity_score"] = round(score, 3)
             results.append(chunk)
             
-        logger.info(f"Retrieved {len(results)} relevant chunks")
+        logger.info(f"Retrieved {len(results)} relevant chunks with scores: {[r['similarity_score'] for r in results]}")
         
         return results
     

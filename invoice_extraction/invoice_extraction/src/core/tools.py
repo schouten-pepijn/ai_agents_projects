@@ -146,7 +146,7 @@ class ToolRegistry:
     def _table_extract(table_text: str, row_pattern: Optional[str] = None, 
                       column: Optional[str] = None) -> List[Dict[str, str]]:
         """Extract data from markdown table"""
-        lines = [l.strip() for l in table_text.split('\n') if l.strip()]
+        lines = [line.strip() for line in table_text.split('\n') if line.strip()]
         
         if len(lines) < 2:
             return []
@@ -155,7 +155,7 @@ class ToolRegistry:
         header = [cell.strip() for cell in lines[0].split('|') if cell.strip()]
         
         # Skip separator line
-        data_lines = [line for line in lines[2:] if not set(line.replace('|', '').strip()) == {'-', ' ', ''}]
+        data_lines = [data_line for data_line in lines[2:] if not set(data_line.replace('|', '').strip()) == {'-', ' ', ''}]
         
         results = []
         for line in data_lines:

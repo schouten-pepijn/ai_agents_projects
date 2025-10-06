@@ -1,35 +1,41 @@
 from langchain_core.prompts import PromptTemplate
 
-EXTRACTION_PROMPT = PromptTemplate(
-   template="""
-You are extracting the field "{field_name}" from a document.
+EXTRACTION_PROMPT = PromptTemplate.from_template("""You are an expert at extracting structured data from invoice documents.
 
-Field Description: {field_description}
-Field Type: {field_type}
+TASK: Extract the field "{field_name}" from the document context below.
 
-You have access to the following tools:
+FIELD DETAILS:
+- Description: {field_description}
+- Type: {field_type}
+- Suggested tools: {suggested_tools}
+
+AVAILABLE TOOLS:
 {tools_desc}
 
-Suggested tools for this field: {suggested_tools}
-
-Document Context:
+DOCUMENT CONTEXT:
 {context}
 
-Instructions:
-1. Analyze the context to find the field value
-2. If needed, use tools by responding with JSON in this format:
-   {{"tool": "tool_name", "parameters": {{"param": "value"}}}}
-3. After using tools (or if not needed), provide the final extracted value
-4. If the field cannot be found, respond with "NOT_FOUND"
+INSTRUCTIONS:
+1. Carefully analyze the context above to locate the exact value for "{field_name}"
+2. Look for labels like: {field_name}, {field_description}
+3. If you need to use a tool (e.g., for date parsing, currency extraction, or pattern matching), respond with ONLY a JSON object in this exact format:
+   {{"tool": "tool_name", "parameters": {{"param_name": "value"}}}}
 
-Your response:""",
-   input_variables=[
-      "field_name", 
-      "field_description", 
-      "field_type",
-      "tools_desc", 
-      "suggested_tools",
-      "context"
-   ]
-)
+4. If you don't need tools OR after receiving tool results, respond with ONLY the extracted value
+   - Just the value, nothing else
+   - No explanations, no labels, no extra text
+   - If the field cannot be found, respond with exactly: NOT_FOUND
+
+EXAMPLES:
+- For invoice_number, respond with: INV-12345
+- For total_amount, respond with: $1,234.56
+- For invoice_date, respond with: 2024-01-15
+- For vendor_name, respond with: Acme Corporation
+
+CRITICAL RULES:
+- Extract ONLY the value, no extra text
+- If uncertain, still provide your best answer (don't say "I'm not sure")
+- If truly not found in context, say: NOT_FOUND
+
+RESPONSE (either JSON for tool call OR the final extracted value):""")
 
