@@ -5,3 +5,5 @@
 .vscode/*
 wip/
 */data/*
+.venv
+**/__init__.py
