@@ -16,9 +16,8 @@ from configs.llm_settings import get_ollama_chat_client, get_ollama_embed_client
 logging.root.setLevel(logging.INFO)
 logger = logging.getLogger()
 
-st.set_page_config(page_title="Invoice Extraction", layout="wide", page_icon="📄")
+st.set_page_config(page_title="Invoice Extraction with LLM", layout="wide", page_icon="📄")
 
-# Custom CSS for better styling
 st.markdown("""
 <style>
     .success-metric {
@@ -45,13 +44,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📄 Professional Invoice Extraction System")
-st.markdown("Extract structured data from invoices using AI-powered RAG")
+st.title("📄 Invoice Extraction Application")
+st.markdown("Extract structured data from invoices using AI-powered RAG & Docling")
 
 # Sidebar configuration
 st.sidebar.header("⚙️ Configuration")
 top_k = st.sidebar.slider("Top K chunks for retrieval", min_value=1, max_value=15, value=5, step=1)
-max_tokens = st.sidebar.select_slider("Max tokens per chunk", options=[256, 512, 1024, 2048], value=512)
+max_tokens = st.sidebar.select_slider("Max tokens per chunk", options=[64, 128, 256, 512, 1024, 2048], value=256)
 show_debug = st.sidebar.checkbox("Show debug information", value=False)
 
 st.sidebar.divider()
@@ -314,7 +313,5 @@ else:
         **Features:**
         - Extracts 10+ common invoice fields
         - Provides confidence scores for each extraction
-        - Supports multiple export formats (JSON, CSV)
-        - Handles various document formats (PDF, images)
-        - Professional UI with progress tracking
+        - Supports multiple export formats (JSON, CSV, PDF)
         """)
