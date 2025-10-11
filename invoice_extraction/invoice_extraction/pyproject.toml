@@ -1,0 +1,31 @@
+[project]
+name = "invoice-extraction"
+version = "0.1.0"
+description = "Invoice extraction project using Docling and LLM"
+authors = [
+    {name = "Pepijn Schouten",email = "pepijn.sch@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "pydantic (>=2.11.9,<3.0.0)",
+    "docling (>=2.55.0,<3.0.0)",
+    "langchain (>=0.3.27,<0.4.0)",
+    "langchain-community (>=0.3.30,<0.4.0)",
+    "chromadb (>=1.1.0,<2.0.0)",
+    "ollama (>=0.6.0,<0.7.0)",
+    "dotenv (>=0.9.9,<0.10.0)",
+    "langchain-ollama (>=0.3.8,<0.4.0)",
+    "streamlit (>=1.50.0,<2.0.0)"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [
+    { include = "core", from = "src" },
+    { include = "configs", from = "src" },
+    { include = "tests", from = "src" }
+]
