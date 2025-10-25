@@ -1,6 +1,6 @@
 from typing import Dict
 from langchain_community.vectorstores.faiss import FAISS
-from multi_agent_research_v1.models.schemas import ResearchState
+from multi_agent_research_v1.core.state import ResearchState
 
 
 def retrieval_node(

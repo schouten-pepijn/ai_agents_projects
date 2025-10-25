@@ -4,13 +4,14 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
-from multi_agent_research_v1.models.schemas import ResearchState, Summary
+from multi_agent_research_v1.models.schemas import Summary
+from multi_agent_research_v1.core.state import ResearchState
 
 
 def summary_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
     """Combine the contents of all documents into a single context string."""
     system_template = (
-        "You are a summarisation assistant. Given a research sub‑question "
+        "You are a summarisation assistant. Given a research sub-question "
         "and a context consisting of relevant passages, write a factual, "
         "concise summary that directly answers the question. Use only the "
         "information contained in the context; do not hallucinate."

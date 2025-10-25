@@ -20,6 +20,14 @@ class Assessment(BaseModel):
     assessment: str = Field(
         description="Assessment of the summary's completeness and accuracy"
     )
+    confidence: float = Field(
+        description="Confidence score (0.0 to 1.0) regarding the assessment",
+        ge=0.0,
+        le=1.0,
+    )
+    needs_refinement: bool = Field(
+        description="Indicates if the summary needs further refinement"
+    )
 
 
 class FinalAnswer(BaseModel):

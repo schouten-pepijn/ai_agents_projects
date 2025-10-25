@@ -6,7 +6,8 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
-from multi_agent_research_v1.models.schemas import ResearchState, SubQuestions
+from multi_agent_research_v1.models.schemas import SubQuestions
+from multi_agent_research_v1.core.state import ResearchState
 
 load_dotenv(".env")
 

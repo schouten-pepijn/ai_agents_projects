@@ -1,13 +1,11 @@
-from typing import Dict, List
 from langchain_core.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
-from langchain_core.documents.base import Document
 from langchain_ollama.chat_models import ChatOllama
-from pydantic import BaseModel, Field
-from multi_agent_research_v1.models.schemas import ResearchState, FinalAnswer
+from multi_agent_research_v1.models.schemas import FinalAnswer
+from multi_agent_research_v1.core.state import ResearchState
 
 
 def synthesis_node(state: ResearchState, llm: ChatOllama) -> ResearchState:

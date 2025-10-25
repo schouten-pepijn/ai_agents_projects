@@ -6,7 +6,7 @@ def create_llm(temperature: float = 0.0) -> ChatOllama:
     """Create and return a ChatOllama instance configured with environment variables."""
 
     return ChatOllama(
-        model=os.getenv("MODEL_LARGE"),
+        model=os.getenv("MODEL_LARGE") or os.getenv("MODEL_SMALL"),
         temperature=temperature,
         base_url=os.getenv("BASE_URL"),
     )
