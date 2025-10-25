@@ -33,34 +33,9 @@ class DoclingRAGExtractor:
         self.vector_store = vector_store
         
         self.current_doc_id = None
-        
-        # Fallback regex patterns for common invoice fields
-        self.fallback_patterns = {
-            "invoice_number": [
-                r'(?:invoice|inv)[\s#:]*([A-Z0-9-]+)',
-                r'#[\s]?([0-9]+)',
-                r'invoice[\s]?number[\s:]*([A-Z0-9-]+)'
-            ],
-            "invoice_date": [
-                r'(?:date|dated)[\s:]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-                r'(?:date|dated)[\s:]*(\d{4}[/-]\d{1,2}[/-]\d{1,2})',
-            ],
-            "due_date": [
-                r'(?:due|payment due)[\s:]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})',
-            ],
-            "total_amount": [
-                r'(?:total|amount due|grand total)[\s:]*([£$€¥]?[\s]?\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)',
-            ],
-            "subtotal": [
-                r'(?:subtotal|sub-total)[\s:]*([£$€¥]?[\s]?\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)',
-            ],
-            "tax_amount": [
-                r'(?:tax|vat|gst)[\s:]*([£$€¥]?[\s]?\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?)',
-            ],
-        }
 
     def process_document(self, path_or_bytes) -> List[Dict[str, Any]]:
-
+        """Simplified document processing with Docling"""
         if isinstance(path_or_bytes, (bytes, bytearray)):
             logger.info("Converting file into documentstream")
             path_or_bytes = DocumentStream(name="file", stream=io.BytesIO(path_or_bytes))
@@ -69,30 +44,18 @@ class DoclingRAGExtractor:
         result = self.converter.convert(path_or_bytes)
         
         logger.info("Chunking document")
-        chunk_iter = self.chunker.chunk(
-            dl_doc=result.document,
-            # max_tokens=self.max_chunk_tokens,
-        )
+        chunk_iter = self.chunker.chunk(dl_doc=result.document)
         
         chunks = []
         for i, chunk in enumerate(chunk_iter):
-            chunk_id = str(uuid.uuid4())
-            
-            if chunks and len(chunk.text.split()) < 10:   
-                chunks[-1]["metadata"]["chunk_index"] = i
-                chunks[-1]["text"] += f"\n{chunk.text}"
-            else:
-                # txt_ctx = self.chunker.contextualize(chunk)
-                chunks.append({
-                    "id": chunk_id,
-                    # "text": txt_ctx,
-                    "text": chunk.text,
-                    "metadata": {
-                        "headings": chunk.meta.headings,
-                        "chunk_index": i,
-                        "has_table": '|' in chunk.text,
-                    }
-                })
+            chunks.append({
+                "id": str(uuid.uuid4()),
+                "text": chunk.text,
+                "metadata": {
+                    "headings": chunk.meta.headings,
+                    "chunk_index": i,
+                }
+            })
         
         return chunks
     
@@ -107,7 +70,8 @@ class DoclingRAGExtractor:
         logger.info(f" Searching for: {query}")
         
         results = self.vector_store.search(query, top_k=top_k)
-        logger.info(f" Retrieved {len(results)} relevant chunks")
+        logger.info(f" Retrieved {len(results) if isinstance(results, list) else 'non-list'} relevant chunks")
+        logger.debug(f" Results type: {type(results)}, first few: {results[:2] if isinstance(results, list) and results else results}")
         
         return results
     
@@ -117,16 +81,15 @@ class DoclingRAGExtractor:
         top_k: int = 5,
     ) -> Dict[str, Any]:
         """
-        Extract fields with confidence scoring and validation.
+        Extract fields using LLM with tool support.
         
         Returns:
-            Dict with field names and their extracted values with metadata:
+            Dict with field names and their extracted values:
             {
                 "field_name": {
                     "value": extracted_value,
-                    "confidence": float (0-1),
                     "source": "chunk text where found",
-                    "status": "success" | "not_found" | "low_confidence" | "error"
+                    "status": "success" | "not_found" | "error"
                 }
             }
         """
@@ -142,73 +105,50 @@ class DoclingRAGExtractor:
                     field_description=field_config.get("description", ""),
                     top_k=top_k
                 ) 
-                # logger.debug(f"Relevant chunks: {relevant_chunks}")
+                logger.debug(f"Relevant chunks: {relevant_chunks}")
                 
-                # if not relevant_chunks:
-                #     logger.warning(f"No relevant chunks found for field: {field_name}")
-                #     extracted_fields[field_name] = {
-                #         "value": None,
-                #         "confidence": 0.0,
-                #         "source": None,
-                #         "status": "not_found"
-                #     }
-                #     continue
+                if not relevant_chunks:
+                    logger.warning(f"No relevant chunks found for field: {field_name}")
+                    extracted_fields[field_name] = {
+                        "value": None,
+                        "source": None,
+                        "status": "not_found"
+                    }
+                    continue
                 
-                # # Calculate confidence from similarity scores
-                # avg_similarity = sum(c.get("similarity_score", 0) for c in relevant_chunks) / len(relevant_chunks)
+                context = self._build_context(relevant_chunks)
+                logger.debug(f"Context for field {field_name}:\n{context}")
                 
-                # context = self._build_context(relevant_chunks)
-                # logger.debug(f"Context for field {field_name}:\n{context}")
+                prompt = self._create_extraction_prompt(
+                   field_name,
+                   field_config,
+                   context
+                )
+                logger.debug(f"Extraction prompt for field {field_name}:\n{prompt}")
                 
-                # prompt = self._create_extraction_prompt(
-                #    field_name,
-                #    field_config,
-                #    context
-                # )
-                # logger.debug(f"Extraction prompt for field {field_name}:\n{prompt}")
+                result = self._call_llm_with_tools(
+                    prompt,
+                    field_config,
+                    relevant_chunks
+                )
                 
-                # result = self._call_llm_with_tools(
-                #     prompt,
-                #     field_config,
-                #     relevant_chunks
-                # )
+                logger.info(f"Extracted value for {field_name}: {result}")
                 
-                # logger.info(f"Extracted value for {field_name}: {result}")
+                # Simple validation
+                status = "success" if result is not None else "not_found"
                 
-                # # Try fallback extraction if LLM failed
-                # if result is None:
-                #     logger.info(f"Attempting fallback extraction for {field_name}")
-                #     fallback_result = self._try_fallback_extraction(field_name, context)
-                #     if fallback_result:
-                #         result = fallback_result
-                #         logger.info(f"Fallback extraction successful: {result}")
-                
-                # # Validate and score the result
-                # if result is None:
-                #     status = "not_found"
-                #     confidence = 0.0
-                # elif avg_similarity < 0.3:
-                #     status = "low_confidence"
-                #     confidence = avg_similarity
-                # else:
-                #     status = "success"
-                #     confidence = min(avg_similarity + 0.2, 1.0)  # Boost confidence if extracted
-                
-                # extracted_fields[field_name] = {
-                #     "value": result,
-                #     "confidence": round(confidence, 2),
-                #     "source": relevant_chunks[0]["text"][:200] if relevant_chunks else None,
-                #     "status": status
-                # }
+                extracted_fields[field_name] = {
+                    "value": result,
+                    "source": relevant_chunks[0]["text"][:200] if relevant_chunks else None,
+                    "status": status
+                }
                 
             except Exception as e:
                 logger.error(f"Error extracting field {field_name}: {e}")
                 extracted_fields[field_name] = {
                     "value": None,
-                    "confidence": 0.0,
                     "source": None,
-                    "status": "error",
-                    "error": str(e)
+                    "status": "error"
                 }
         
         return extracted_fields
@@ -390,7 +330,6 @@ class DoclingRAGExtractor:
             if match:
                 try:
                     return int(match.group())
-                
                 except ValueError:
                     logger.warning(f"Could not convert {match.group()} to integer")
                     return None
@@ -410,10 +349,8 @@ class DoclingRAGExtractor:
         
         elif field_type == 'email':
             email_match = re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', response)
-            
             if email_match:
                 return email_match.group()
-            
             return None
         
         elif field_type == 'phone':
@@ -424,24 +361,3 @@ class DoclingRAGExtractor:
         
         # Default: return cleaned response
         return response if len(response) > 0 else None
-    
-    def _try_fallback_extraction(self, field_name: str, context: str) -> Optional[str]:
-        """Try pattern-based extraction as fallback when LLM fails"""
-        if field_name not in self.fallback_patterns:
-            return None
-        
-        patterns = self.fallback_patterns[field_name]
-        
-        for pattern in patterns:
-            try:
-                match = re.search(pattern, context, re.IGNORECASE | re.MULTILINE)
-                if match:
-                    value = match.group(1) if match.lastindex else match.group(0)
-                    logger.info(f"Fallback extraction successful for {field_name}: {value}")
-                    return value.strip()
-                
-            except Exception as e:
-                logger.debug(f"Fallback pattern failed for {field_name}: {e}")
-                continue
-        
-        return None
