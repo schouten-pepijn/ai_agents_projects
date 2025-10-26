@@ -28,7 +28,7 @@ def synthesis_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
 
     user_template = "User query: {query}\n\nVerified Summaries:\n{combined_summaries}\n\nFinal Answer:"
 
-    prompt = ChatPromptTemplate.from_messages(
+    prompt = ChatPromptTemplate(
         [
             SystemMessagePromptTemplate.from_template(system_template),
             HumanMessagePromptTemplate.from_template(user_template),

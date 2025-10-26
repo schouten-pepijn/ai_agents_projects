@@ -35,7 +35,7 @@ def verification_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
             context + "Sub-question: {question}\nSummary: {summary}\nAssessment:"
         )
 
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = ChatPromptTemplate(
             [
                 SystemMessagePromptTemplate.from_template(system_template),
                 HumanMessagePromptTemplate.from_template(user_template),

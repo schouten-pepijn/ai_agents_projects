@@ -25,7 +25,7 @@ def summary_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
 
         user_template = "Question: {question}\nContext:\n{context}\nSummary:"
 
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = ChatPromptTemplate(
             [
                 SystemMessagePromptTemplate.from_template(system_template),
                 HumanMessagePromptTemplate.from_template(user_template),

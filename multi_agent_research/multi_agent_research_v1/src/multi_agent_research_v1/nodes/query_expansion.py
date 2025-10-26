@@ -26,7 +26,7 @@ def query_expansion_node(state: ResearchState, llm: ChatOllama) -> ResearchState
         if fb != "OK":
             user_template = "Original question: {question}\nFeedback: {feedback}\nAlternative questions:"
 
-            prompt = ChatPromptTemplate.from_messages(
+            prompt = ChatPromptTemplate(
                 [
                     SystemMessagePromptTemplate.from_template(system_template),
                     HumanMessagePromptTemplate.from_template(user_template),
