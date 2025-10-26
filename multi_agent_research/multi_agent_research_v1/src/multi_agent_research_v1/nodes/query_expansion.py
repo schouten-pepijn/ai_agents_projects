@@ -51,7 +51,7 @@ def query_expansion_node(state: ResearchState, llm: ChatOllama) -> ResearchState
             "Generate ONE improved question:"
         )
 
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = ChatPromptTemplate(
             [
                 SystemMessagePromptTemplate.from_template(system_template),
                 HumanMessagePromptTemplate.from_template(user_template),
