@@ -1,4 +1,5 @@
 from langchain_ollama.chat_models import ChatOllama
+import logging
 from langchain_core.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
@@ -7,9 +8,15 @@ from langchain_core.prompts import (
 from multi_agent_research_v1.models.schemas import Summary
 from multi_agent_research_v1.core.state import ResearchState
 
+logger = logging.getLogger("multi_agent_research")
+
 
 def summary_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
     """Combine the contents of all documents into a single context string."""
+    iteration = state.get("refinement_iteration", 0)
+
+    logger.info(f"-> SUMMARIZER: Creating summaries (iteration {iteration})")
+
     system_template = (
         "You are a summarisation assistant. Given a research sub-question "
         "and a context consisting of relevant passages, write a factual, "
@@ -38,5 +45,6 @@ def summary_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
         summaries[question] = response.summary
 
     state["summaries"] = summaries
+    logger.info(f"   Created {len(summaries)} summaries")
 
     return state

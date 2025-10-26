@@ -4,12 +4,19 @@ from multi_agent_research_v1.core.state import ResearchState
 from multi_agent_research_v1.core.workflow import build_workflow
 from multi_agent_research_v1.utils.llm import create_llm
 from multi_agent_research_v1.utils.vector_store import prepare_vector_store
+from multi_agent_research_v1.utils.logging_config import setup_logging
 
 load_dotenv(".env")
+
+# Setup logging
+logger = setup_logging()
 
 
 def demo() -> None:
     """Demonstrate the multi-agent research workflow."""
+    logger.info("=" * 60)
+    logger.info("MULTI-AGENT RESEARCH WORKFLOW")
+    logger.info("=" * 60)
 
     docs = [
         Document(
@@ -62,12 +69,24 @@ def demo() -> None:
         "retrieved_docs": {},
         "summaries": {},
         "answer": None,
+        "verification_feedback": {},
+        "refinement_iteration": 0,
+        "max_iterations": 2,
     }
 
+    logger.info(f"\nQuery: {initial_state['query']}")
+    logger.info(f"Max iterations: {initial_state['max_iterations']}\n")
+
     # Execute the workflow
+    logger.info("Starting workflow execution...")
     result_state = workflow.invoke(initial_state)
+    logger.info("Workflow completed!\n")
 
     # Display results
+    logger.info("=" * 60)
+    print("\n" + "=" * 60)
+    print("RESULTS")
+    print("=" * 60)
     print("Sub-questions:\n", result_state["sub_questions"])
 
     print("\nSummaries:")

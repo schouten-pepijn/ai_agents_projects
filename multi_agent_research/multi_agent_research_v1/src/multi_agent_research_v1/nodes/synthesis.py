@@ -3,13 +3,18 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
+import logging
 from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v1.models.schemas import FinalAnswer
 from multi_agent_research_v1.core.state import ResearchState
 
+logger = logging.getLogger("multi_agent_research")
+
 
 def synthesis_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
     """Synthesize the verified summaries into a final answer."""
+    logger.info("-> SYNTHESIZER: Generating final answer")
+
     query = state["query"]
 
     combined_summaries = "\n\n".join(
@@ -43,5 +48,6 @@ def synthesis_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
     response = llm_parsed.invoke(messages)
 
     state["answer"] = response.final_answer.strip()
+    logger.info("   Final answer generated")
 
     return state

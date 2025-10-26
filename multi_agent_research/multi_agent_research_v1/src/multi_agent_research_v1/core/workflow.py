@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, START, END
+import logging
 from multi_agent_research_v1.nodes.planner import planner_node
 from multi_agent_research_v1.nodes.retrieval import retrieval_node
 from multi_agent_research_v1.nodes.summary import summary_node
@@ -6,6 +7,8 @@ from multi_agent_research_v1.nodes.verification import verification_node
 from multi_agent_research_v1.nodes.synthesis import synthesis_node
 from multi_agent_research_v1.nodes.query_expansion import query_expansion_node
 from multi_agent_research_v1.core.state import ResearchState
+
+logger = logging.getLogger("multi_agent_research")
 
 
 def build_workflow(llm, vector_store) -> StateGraph:
@@ -36,19 +39,22 @@ def build_workflow(llm, vector_store) -> StateGraph:
     return workflow.compile()
 
 
-def needs_refinement(state: ResearchState) -> bool:
+def needs_refinement(state: ResearchState) -> str:
     """Determine if any summaries need refinement based on verification results."""
     iteration = state.get("refinement_iteration", 0)
     max_iter = state.get("max_iterations", 2)
 
     if iteration >= max_iter:
+        logger.info(f"-> ROUTING: Max iterations ({max_iter}) reached → SYNTHESIZER")
         return "synthesizer"
 
     feedback = state.get("verification_feedback", {})
     for question, fb in feedback.items():
         if fb != "OK":
-            state["refinement_iteration"] = iteration + 1
-
+            logger.info(
+                f"-> ROUTING: Issues found (iteration {iteration}/{max_iter}) → QUERY_EXPANDER"
+            )
             return "query_expander"
 
+    logger.info("-> ROUTING: All summaries verified → SYNTHESIZER")
     return "synthesizer"

@@ -3,13 +3,17 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate,
 )
+import logging
 from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v1.models.schemas import Assessment
 from multi_agent_research_v1.core.state import ResearchState
 
+logger = logging.getLogger("multi_agent_research")
+
 
 def verification_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
     """Verify each summary for completeness and alignment with the sub-question."""
+    logger.info("-> VERIFIER: Checking summary quality")
 
     system_template = (
         "You are a critical reviewer. Evaluate whether the summary below "
@@ -56,5 +60,9 @@ def verification_node(state: ResearchState, llm: ChatOllama) -> ResearchState:
 
     state["summaries"] = verified
     state["verification_feedback"] = feedback
+
+    passed = sum(1 for fb in feedback.values() if fb == "OK")
+    failed = len(feedback) - passed
+    logger.info(f"   Results: {passed} passed, {failed} need improvement")
 
     return state
