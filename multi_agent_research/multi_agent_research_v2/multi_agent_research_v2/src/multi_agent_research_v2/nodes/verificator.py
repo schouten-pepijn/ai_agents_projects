@@ -38,7 +38,7 @@ Summary: {summary}
 Evaluate:"""
 
             try:
-                response = self.llm.predict(f"{system_template}\n\n{user_template}")
+                response = self.llm.invoke(f"{system_template}\n\n{user_template}")
                 result = json.loads(response.strip())
 
                 status = result.get("status", "fail")
