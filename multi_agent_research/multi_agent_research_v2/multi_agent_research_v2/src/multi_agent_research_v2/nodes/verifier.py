@@ -1,10 +1,28 @@
 import logging
 import json
+import re
 from langchain_ollama import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 
 logger = logging.getLogger("multi_agent_research")
+
+
+def extract_json(text: str) -> str:
+    """Extract JSON from text that might contain markdown or other formatting."""
+    text = text.strip()
+
+    # Try to find JSON object in the text
+    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
+    if json_match:
+        return json_match.group(0)
+
+    # Try to find JSON array in the text
+    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
+    if array_match:
+        return array_match.group(0)
+
+    return text
 
 
 class VerificationNode:
@@ -39,7 +57,9 @@ Evaluate:"""
 
             try:
                 response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-                result = json.loads(response.strip())
+                content = response.content.strip()
+                json_str = extract_json(content)
+                result = json.loads(json_str)
 
                 status = result.get("status", "fail")
                 score = float(result.get("score", 5)) / 10.0

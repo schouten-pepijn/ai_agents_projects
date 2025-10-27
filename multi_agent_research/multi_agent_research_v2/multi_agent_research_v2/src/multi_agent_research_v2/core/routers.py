@@ -1,7 +1,7 @@
 import logging
 from typing import Literal
-from src.multi_agent_research_v2.core.state import ResearchState
-from src.multi_agent_research_v2.config.config import WorkflowConfig
+from multi_agent_research_v2.core.state import ResearchState
+from multi_agent_research_v2.config.config import WorkflowConfig
 
 logger = logging.getLogger("multi_agent_research")
 
@@ -18,7 +18,7 @@ def route_after_planner(
 
         return "retriever"
 
-    if iteration < config.max_refinement_interations:
+    if iteration < config.max_refinement_iterations:
         logger.warning(f"Planner quality low ({quality_score:.2f}), refining")
 
         return "planner"

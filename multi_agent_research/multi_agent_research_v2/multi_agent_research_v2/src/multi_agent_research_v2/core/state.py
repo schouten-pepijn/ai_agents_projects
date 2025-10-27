@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 
 
 class ResearchState(TypedDict):
+    """TypedDict representing the state of the research workflow."""
 
     query: str
     sub_questions: List[str]
@@ -17,3 +18,21 @@ class ResearchState(TypedDict):
 
     status: str
     current_node: str | None
+
+
+def initialize_research_state(initial_query: str) -> ResearchState:
+    """Initialize and return a ResearchState with default values."""
+
+    return ResearchState(
+        query=initial_query,
+        sub_questions=[],
+        retrieved_docs={},
+        summaries={},
+        answer=None,
+        quality_scores={},
+        iteration_counts={},
+        errors=[],
+        routing_history=[],
+        status="initialized",
+        current_node=None,
+    )

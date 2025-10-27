@@ -10,7 +10,9 @@ load_dotenv(".env")
 class WorkflowConfig:
     """Centralized configuration for the research workflow."""
 
-    model_name: str = os.environ["MODEL_LARGE"] | os.environ["MODEL_SMALL"]
+    model_name: str = os.getenv("MODEL_LARGE", None) or os.getenv(
+        "MODEL_SMALL", "llama3.1:8b"
+    )
     base_url: str = os.environ["BASE_URL"]
     embed_model: str = os.environ["EMBED_MODEL"]
     temperature: float = 0.0
@@ -20,7 +22,7 @@ class WorkflowConfig:
     similarity_threshold: float = 0.7
 
     min_quality_score: float = 0.7
-    max_refinement_interations: int = 2
+    max_refinement_iterations: int = 2
 
     min_subquestions: int = 2
     max_subquestions: int = 5

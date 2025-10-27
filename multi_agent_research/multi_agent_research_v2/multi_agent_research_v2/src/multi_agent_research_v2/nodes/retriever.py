@@ -1,5 +1,5 @@
 import logging
-from langchain_core.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 

@@ -1,6 +1,7 @@
 import logging
 import json
-from langchain_ollama import OllamaChat
+import re
+from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 from multi_agent_research_v2.nodes.quality_assessor import QualityAssessor
@@ -8,11 +9,28 @@ from multi_agent_research_v2.nodes.quality_assessor import QualityAssessor
 logger = logging.getLogger("multi_agent_research")
 
 
+def extract_json(text: str) -> str:
+    """Extract JSON from text that might contain markdown or other formatting."""
+    text = text.strip()
+
+    # Try to find JSON object in the text
+    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
+    if json_match:
+        return json_match.group(0)
+
+    # Try to find JSON array in the text
+    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
+    if array_match:
+        return array_match.group(0)
+
+    return text
+
+
 class PlannerNode:
     """Planning node with quality validation and refinement."""
 
     def __init__(
-        self, llm: OllamaChat, assessor: QualityAssessor, config: WorkflowConfig
+        self, llm: ChatOllama, assessor: QualityAssessor, config: WorkflowConfig
     ):
         self.llm = llm
         self.config = config
@@ -27,7 +45,7 @@ class PlannerNode:
         iteration = state["iteration_counts"].get("planner", 0)
         state["iteration_counts"]["planner"] = iteration + 1
 
-        if iteration >= self.config.max_refinement_interations:
+        if iteration >= self.config.max_refinement_iterations:
             logger.warning("Max planner iterations reached")
             state["errors"].append("Planner: Max iterations exceeded")
 
@@ -52,12 +70,14 @@ Respond with ONLY a JSON array of strings: ["question 1", "question 2", ...]"""
         try:
             response = self.llm.invoke(f"{system_template}\n\n{user_template}")
 
-            sub_questions = json.loads(response)
+            content = response.content.strip()
+            json_str = extract_json(content)
+            sub_questions = json.loads(json_str)
 
             if not isinstance(sub_questions, list):
                 raise ValueError("Response is not a list")
 
-            score, quality = self.assessor.assess_sub_questions(query, sub_questions)
+            score, quality = self.assessor.assess_subquestions(query, sub_questions)
             state["quality_scores"]["planner"] = score
 
             logger.info(f"Planner quality: {quality.value} (score: {score:.2f})")

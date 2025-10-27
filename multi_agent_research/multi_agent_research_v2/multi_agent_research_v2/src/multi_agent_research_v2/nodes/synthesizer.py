@@ -1,6 +1,6 @@
 import logging
 import json
-from langchain_ollama import ChatOllama
+from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 
@@ -57,7 +57,7 @@ Synthesize a comprehensive answer:"""
 
         try:
             response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-            answer = response.strip()
+            answer = response.content.strip()
 
             answer_length = len(answer)
             if answer_length < self.config.min_answer_length:

@@ -1,16 +1,34 @@
 import json
 import logging
+import re
 from typing import List, Tuple
-from langchain_ollama import OllamaChat
+from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig, QualityLevel
 
 logger = logging.getLogger("multi_agent_research")
 
 
+def extract_json(text: str) -> str:
+    """Extract JSON from text that might contain markdown or other formatting."""
+    text = text.strip()
+
+    # Try to find JSON object in the text
+    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
+    if json_match:
+        return json_match.group(0)
+
+    # Try to find JSON array in the text
+    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
+    if array_match:
+        return array_match.group(0)
+
+    return text
+
+
 class QualityAssessor:
     """Assess quality of outputs at various stages."""
 
-    def __init__(self, llm: OllamaChat, config: WorkflowConfig):
+    def __init__(self, llm: ChatOllama, config: WorkflowConfig):
         self.llm = llm
         self.config = config
 
@@ -45,7 +63,9 @@ Respond with ONLY a JSON object: {{"score": <average 0-10>, "reasoning": "brief 
 
         try:
             response = self.llm.invoke(prompt_template)
-            result = json.loads(response.strip())
+            content = response.content.strip()
+            json_str = extract_json(content)
+            result = json.loads(json_str)
             score = float(result.get("score", 5)) / 10.0
 
             if score >= 0.85:
@@ -91,8 +111,10 @@ Rate on:
 Respond with ONLY a JSON object: {{"score": <average 0-10>, "issues": ["list", "of", "issues"]}}"""
 
         try:
-            response = self.llm.predict(prompt_template)
-            result = json.loads(response.strip())
+            response = self.llm.invoke(prompt_template)
+            content = response.content.strip()
+            json_str = extract_json(content)
+            result = json.loads(json_str)
             score = float(result.get("score", 5)) / 10.0
 
             if score >= 0.85:

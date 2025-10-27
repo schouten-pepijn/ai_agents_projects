@@ -1,5 +1,5 @@
 import logging
-from langchain_ollama import ChatOllama
+from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 from multi_agent_research_v2.nodes.quality_assessor import QualityAssessor
@@ -62,7 +62,7 @@ Provide a focused summary:"""
 
             try:
                 response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-                summary = response.strip()
+                summary = response.content.strip()
 
                 score, quality = self.assessor.assess_summary(
                     question, summary, context
