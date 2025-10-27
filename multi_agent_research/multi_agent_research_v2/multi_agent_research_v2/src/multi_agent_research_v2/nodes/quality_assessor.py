@@ -1,28 +1,13 @@
-import json
 import logging
-import re
 from typing import List, Tuple
 from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig, QualityLevel
+from multi_agent_research_v2.nodes.schemas import (
+    QualityAssessmentOutput,
+    SummaryQualityOutput,
+)
 
 logger = logging.getLogger("multi_agent_research")
-
-
-def extract_json(text: str) -> str:
-    """Extract JSON from text that might contain markdown or other formatting."""
-    text = text.strip()
-
-    # Try to find JSON object in the text
-    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
-    if json_match:
-        return json_match.group(0)
-
-    # Try to find JSON array in the text
-    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
-    if array_match:
-        return array_match.group(0)
-
-    return text
 
 
 class QualityAssessor:
@@ -46,12 +31,15 @@ class QualityAssessor:
         if len(sub_questions) > self.config.max_subquestions:
             return 0.5, QualityLevel.ACCEPTABLE
 
-        prompt_template = f"""Assess the quality of these sub-questions for the main query.
+        # Format sub-questions as numbered list
+        questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(sub_questions)])
+
+        prompt = f"""Assess the quality of these sub-questions for the main query.
         
 Main Query: {query}
 
 Sub-questions:
-{json.dumps(sub_questions, indent=2)}
+{questions_text}
 
 Evaluate on:
 1. Relevance to main query (0-10)
@@ -59,14 +47,12 @@ Evaluate on:
 3. Non-redundancy (0-10)
 4. Clarity (0-10)
 
-Respond with ONLY a JSON object: {{"score": <average 0-10>, "reasoning": "brief explanation"}}"""
+Provide an average score (0-10) and brief reasoning."""
 
         try:
-            response = self.llm.invoke(prompt_template)
-            content = response.content.strip()
-            json_str = extract_json(content)
-            result = json.loads(json_str)
-            score = float(result.get("score", 5)) / 10.0
+            structured_llm = self.llm.with_structured_output(QualityAssessmentOutput)
+            result = structured_llm.invoke(prompt)
+            score = result.score / 10.0
 
             if score >= 0.85:
                 return score, QualityLevel.EXCELLENT
@@ -97,7 +83,7 @@ Respond with ONLY a JSON object: {{"score": <average 0-10>, "reasoning": "brief 
         if not summary or len(summary) < 20:
             return 0.0, QualityLevel.UNACCEPTABLE
 
-        prompt_template = f"""Assess this summary's quality.
+        prompt = f"""Assess this summary's quality.
 
 Question: {question}
 Summary: {summary}
@@ -108,14 +94,13 @@ Rate on:
 3. Conciseness (0-10)
 4. Factual grounding (no hallucination) (0-10)
 
-Respond with ONLY a JSON object: {{"score": <average 0-10>, "issues": ["list", "of", "issues"]}}"""
+Provide an average score (0-10) and list any issues found."""
 
         try:
-            response = self.llm.invoke(prompt_template)
-            content = response.content.strip()
-            json_str = extract_json(content)
-            result = json.loads(json_str)
-            score = float(result.get("score", 5)) / 10.0
+            # Use structured output with Pydantic model
+            structured_llm = self.llm.with_structured_output(SummaryQualityOutput)
+            result = structured_llm.invoke(prompt)
+            score = result.score / 10.0
 
             if score >= 0.85:
                 return score, QualityLevel.EXCELLENT
@@ -131,6 +116,10 @@ Respond with ONLY a JSON object: {{"score": <average 0-10>, "issues": ["list", "
 
             else:
                 return score, QualityLevel.UNACCEPTABLE
+
+        except Exception as e:
+            logger.warning(f"Summary assessment failed: {e}")
+            return 0.6, QualityLevel.ACCEPTABLE
 
         except Exception as e:
             logger.warning(f"Summary assessment failed: {e}")

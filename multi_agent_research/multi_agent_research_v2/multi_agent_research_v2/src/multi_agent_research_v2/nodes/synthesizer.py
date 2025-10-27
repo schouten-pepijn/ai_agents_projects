@@ -1,8 +1,8 @@
 import logging
-import json
 from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
+from multi_agent_research_v2.nodes.schemas import SynthesisOutput
 
 logger = logging.getLogger("multi_agent_research")
 
@@ -36,7 +36,7 @@ class SynthesisNode:
             [f"Sub-question: {q}\nFindings: {s}" for q, s in summaries.items()]
         )
 
-        system_template = """You are an expert research synthesis assistant. Create a 
+        prompt = f"""You are an expert research synthesis assistant. Create a 
 comprehensive, well-structured answer that:
 
 1. Directly addresses the main research question
@@ -46,18 +46,19 @@ comprehensive, well-structured answer that:
 5. Acknowledges any limitations or gaps
 6. Uses clear, professional language
 
-Structure: Introduction → Main findings → Synthesis → Conclusion"""
+Structure: Introduction → Main findings → Synthesis → Conclusion
 
-        user_template = f"""Main Research Question: {query}
+Main Research Question: {query}
 
 Research Findings:
 {combined}
 
-Synthesize a comprehensive answer:"""
+Synthesize a comprehensive answer."""
 
         try:
-            response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-            answer = response.content.strip()
+            structured_llm = self.llm.with_structured_output(SynthesisOutput)
+            result = structured_llm.invoke(prompt)
+            answer = result.answer
 
             answer_length = len(answer)
             if answer_length < self.config.min_answer_length:

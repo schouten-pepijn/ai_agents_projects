@@ -1,28 +1,10 @@
 import logging
-import json
-import re
 from langchain_ollama import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
+from multi_agent_research_v2.nodes.schemas import VerificationOutput
 
 logger = logging.getLogger("multi_agent_research")
-
-
-def extract_json(text: str) -> str:
-    """Extract JSON from text that might contain markdown or other formatting."""
-    text = text.strip()
-
-    # Try to find JSON object in the text
-    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
-    if json_match:
-        return json_match.group(0)
-
-    # Try to find JSON array in the text
-    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
-    if array_match:
-        return array_match.group(0)
-
-    return text
 
 
 class VerificationNode:
@@ -42,29 +24,24 @@ class VerificationNode:
         verification_scores = []
 
         for question, summary in state.get("summaries", {}).items():
-            system_template = """You are a critical research verifier. Evaluate summaries for:
+            prompt = f"""You are a critical research verifier. Evaluate the following summary for:
 1. Factual accuracy
 2. Completeness (answers the question)
 3. Clarity
 4. Absence of hallucination
 
-Respond with JSON: {"status": "pass" or "fail", "score": 0-10, "feedback": "explanation"}"""
-
-            user_template = f"""Question: {question}
+Question: {question}
 Summary: {summary}
 
-Evaluate:"""
+Provide your evaluation with status ('pass' or 'fail'), score (0-10), and detailed feedback."""
 
             try:
-                response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-                content = response.content.strip()
-                json_str = extract_json(content)
-                result = json.loads(json_str)
+                structured_llm = self.llm.with_structured_output(VerificationOutput)
+                result = structured_llm.invoke(prompt)
 
-                status = result.get("status", "fail")
-                score = float(result.get("score", 5)) / 10.0
-
-                feedback = result.get("feedback", "")
+                status = result.status
+                score = result.score / 10.0
+                feedback = result.feedback
 
                 verification_scores.append(score)
 
@@ -73,7 +50,7 @@ Evaluate:"""
                     logger.debug(f"Verification passed for: {question}")
 
                 else:
-                    verified[question] = f"{summary}\n\n[⚠ Verification: {feedback}]"
+                    verified[question] = f"{summary}\n\n[Verification: {feedback}]"
                     logger.warning(f"Verification concern for '{question}': {feedback}")
 
             except Exception as e:

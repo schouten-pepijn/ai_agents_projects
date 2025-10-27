@@ -1,29 +1,11 @@
 import logging
-import json
-import re
 from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 from multi_agent_research_v2.nodes.quality_assessor import QualityAssessor
+from multi_agent_research_v2.nodes.schemas import SubQuestionsOutput
 
 logger = logging.getLogger("multi_agent_research")
-
-
-def extract_json(text: str) -> str:
-    """Extract JSON from text that might contain markdown or other formatting."""
-    text = text.strip()
-
-    # Try to find JSON object in the text
-    json_match = re.search(r"\{[^}]+\}", text, re.DOTALL)
-    if json_match:
-        return json_match.group(0)
-
-    # Try to find JSON array in the text
-    array_match = re.search(r"\[[^\]]+\]", text, re.DOTALL)
-    if array_match:
-        return array_match.group(0)
-
-    return text
 
 
 class PlannerNode:
@@ -53,8 +35,8 @@ class PlannerNode:
 
         query = state["query"]
 
-        system_template = """You are an expert research planning assistant. Decompose complex 
-research questions into focused, actionable sub-questions.
+        prompt = f"""You are an expert research planning assistant. Decompose the following complex 
+research question into focused, actionable sub-questions.
 
 Guidelines:
 - Generate 2-5 sub-questions
@@ -63,19 +45,13 @@ Guidelines:
 - Avoid redundancy
 - Ensure logical flow
 
-Respond with ONLY a JSON array of strings: ["question 1", "question 2", ...]"""
-
-        user_template = f"Main research query: {query}\n\nGenerate sub-questions:"
+Main research query: {query}"""
 
         try:
-            response = self.llm.invoke(f"{system_template}\n\n{user_template}")
+            structured_llm = self.llm.with_structured_output(SubQuestionsOutput)
+            result = structured_llm.invoke(prompt)
 
-            content = response.content.strip()
-            json_str = extract_json(content)
-            sub_questions = json.loads(json_str)
-
-            if not isinstance(sub_questions, list):
-                raise ValueError("Response is not a list")
+            sub_questions = result.sub_questions
 
             score, quality = self.assessor.assess_subquestions(query, sub_questions)
             state["quality_scores"]["planner"] = score

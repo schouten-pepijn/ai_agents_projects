@@ -3,6 +3,7 @@ from langchain_ollama.chat_models import ChatOllama
 from multi_agent_research_v2.config.config import WorkflowConfig
 from multi_agent_research_v2.core.state import ResearchState
 from multi_agent_research_v2.nodes.quality_assessor import QualityAssessor
+from multi_agent_research_v2.nodes.schemas import SummaryOutput
 
 logger = logging.getLogger("multi_agent_research")
 
@@ -42,8 +43,8 @@ class SummarizerNode:
                 [f"[Document {i+1}]\n{doc.page_content}" for i, doc in enumerate(docs)]
             )
 
-            system_template = """You are a precise research summarization assistant. 
-Create factual, concise summaries that directly answer questions using ONLY 
+            prompt = f"""You are a precise research summarization assistant. 
+Create a factual, concise summary that directly answers the question using ONLY 
 the provided context.
 
 Guidelines:
@@ -51,18 +52,19 @@ Guidelines:
 - Be specific and concrete
 - Cite key facts
 - Acknowledge limitations if context is insufficient
-- Use 2-4 sentences"""
+- Use 2-4 sentences
 
-            user_template = f"""Question: {question}
+Question: {question}
 
 Context:
 {context}
 
-Provide a focused summary:"""
+Provide a focused summary."""
 
             try:
-                response = self.llm.invoke(f"{system_template}\n\n{user_template}")
-                summary = response.content.strip()
+                structured_llm = self.llm.with_structured_output(SummaryOutput)
+                result = structured_llm.invoke(prompt)
+                summary = result.summary
 
                 score, quality = self.assessor.assess_summary(
                     question, summary, context

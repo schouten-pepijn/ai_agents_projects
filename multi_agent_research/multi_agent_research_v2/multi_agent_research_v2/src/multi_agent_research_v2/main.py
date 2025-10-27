@@ -89,16 +89,35 @@ def demo() -> None:
 
     result_state = app.invoke(initial_state)
 
-    # Display the final result
     logger.info("Research workflow completed successfully")
+
+    print("\nSUB-QUESTIONS:")
+    for i, sq in enumerate(result_state["sub_questions"], 1):
+        print(f"  {i}. {sq}")
+
+    print("\nQUALITY SCORES:")
+    for node, score in result_state["quality_scores"].items():
+        print(f"  {node}: {score:.2f}")
+
+    print("\nROUTING HISTORY:")
+    for event in result_state["routing_history"]:
+        print(f"  → {event}")
+
+    print("\nSUMMARIES:")
+    for q, s in result_state["summaries"].items():
+        print(f"\n  Q: {q}")
+        print(f"  A: {s}\n")
+
     if result_state and result_state.get("answer"):
         print("\n" + "=" * 50)
         print("FINAL RESEARCH ANSWER:")
         print("=" * 50)
         print(result_state["answer"])
         print("=" * 50)
+
     else:
         logger.warning("No final answer found in result state")
+
         if result_state:
             print(f"\nWorkflow status: {result_state.get('status')}")
             print(f"Errors: {result_state.get('errors', [])}")
