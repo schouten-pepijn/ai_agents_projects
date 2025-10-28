@@ -1,0 +1,21 @@
+[project]
+name = "research-crew"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Pepijn Schouten",email = "pepijn.schouten@flynth.nl"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "dotenv (>=0.9.9,<0.10.0)",
+    "crewai-tools[serpapi] (>=1.2.1,<2.0.0)",
+    "crewai (>=1.2.1,<2.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "research_crew", from = "src"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
